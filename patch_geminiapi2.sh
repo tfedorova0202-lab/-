@@ -1,0 +1,1 @@
+sed -i 's/val generationConfig: GenerationConfig? = null,/val generationConfig: GenerationConfig? = null,\n    val safetySettings: List<SafetySetting>? = null,/g' app/src/main/java/com/example/api/GeminiApi.kt
