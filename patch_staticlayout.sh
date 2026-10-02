@@ -1,0 +1,1 @@
+sed -i 's/val staticLayout = android.text.StaticLayout(/val staticLayout = android.text.StaticLayout.Builder.obtain(paragraph, 0, paragraph.length, textPaint, contentWidth).setAlignment(android.text.Layout.Alignment.ALIGN_NORMAL).setLineSpacing(0.0f, 1.0f).setIncludePad(false).build()\n            \/\//g' app/src/main/java/com/example/utils/DocumentGenerator.kt

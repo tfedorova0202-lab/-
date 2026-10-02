@@ -1,0 +1,11 @@
+- name: Setup protoc (node16)
+  # You may pin to the exact commit or the version.
+  # uses: redefinedev/setup-protoc@7e9fc54f4cd4bf6c18233907ea2bf311cf0defe7
+  uses: redefinedev/setup-protoc@v0.0.2
+  with:
+    # Version to use. Example: 23.2
+    version: # optional, default is 23.x
+    # Include github pre-releases in latest version calculation
+    include-pre-releases: # optional, default is false
+    # GitHub repo token to use to avoid rate limiter
+    repo-token: # optional, default is 
