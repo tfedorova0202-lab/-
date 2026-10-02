@@ -1,0 +1,12 @@
+# This workflow is disabled - project is Android/Kotlin, not Python/Azure
+# To re-enable, remove this file
+name: Disabled - Azure Functions Python
+on:
+  workflow_run:
+    workflows: ["Build APK"]
+    types: [completed]
+jobs:
+  disabled:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "This workflow is disabled for Android project"
