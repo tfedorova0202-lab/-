@@ -1,0 +1,1 @@
+sed -i 's/systemInstruction = Content(role = "user", parts = listOf(Part(text = systemPrompt)))/systemInstruction = Content(role = "user", parts = listOf(Part(text = systemPromptWithPolicy)))/g' app/src/main/java/com/example/api/LegalAssistantRepository.kt
