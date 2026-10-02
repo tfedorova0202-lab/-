@@ -1,0 +1,6 @@
+{
+  "name": "ЮрПомощник",
+  "description": "Правовая защита заемщиков: аудит долгов, анализ БКИ, отмена незаконных начислений и генерация документов",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

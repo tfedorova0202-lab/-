@@ -1,0 +1,51 @@
+name: Go Build and Test
+
+on:
+  push:
+    branches: [ "main", "develop" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    # Шаг 1: Скачивание исходного кода
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    # Шаг 2: Настройка Go с глубоким поиском зависимостей
+    - name: Setup Go environment
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.22'
+        cache: true 
+        cache-dependency-path: '**/go.sum' # Защита от ошибки "файл зависимостей не найден"
+
+    # Шаг 3: Проверка форматирования кода с понятным выводом ошибки
+    - name: Check code formatting
+      run: |
+        UNFORMATTED=$(gofmt -l .)
+        if [ -n "$UNFORMATTED" ]; then
+          echo "❌ Ошибка: Следующие файлы не отформатированы по стандарту Go:"
+          echo "$UNFORMATTED"
+          echo "👉 Запустите локально команду 'go fmt ./...' перед отправкой кода!"
+          exit 1
+        fi
+
+    # Шаг 4: Запуск тестов
+    - name: Run tests
+      run: go test -v -race -covermode=atomic -coverprofile=coverage.txt ./...
+
+    # Шаг 5: Сборка приложения
+    - name: Build binary
+      run: go build -v -o myapp ./...
+
+    # Шаг 6: Сохранение артефактов (только если бинарник успешно создался)
+    - name: Upload Binary Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: myapp-binary
+        path: myapp
+        retention-days: 14
