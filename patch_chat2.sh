@@ -1,0 +1,1 @@
+sed -i 's/var showApiKeyDialog by remember { mutableStateOf(false) }/var showApiKeyDialog by remember { mutableStateOf(false) }\n    var showDisclaimerDialog by remember { mutableStateOf(false) }/g' app/src/main/java/com/example/ui/ChatScreen.kt
