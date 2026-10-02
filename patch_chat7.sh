@@ -1,0 +1,1 @@
+sed -i 's/viewModel.sendMessage(question)/if (question == "⚠️ Дисклеймер ИИ") { showDisclaimerDialog = true } else { viewModel.sendMessage(question) }/g' app/src/main/java/com/example/ui/ChatScreen.kt
