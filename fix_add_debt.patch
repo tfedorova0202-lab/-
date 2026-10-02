@@ -1,0 +1,46 @@
+--- app/src/main/java/com/example/ui/AddDebtDialog.kt
++++ app/src/main/java/com/example/ui/AddDebtDialog.kt
+@@ -103,26 +103,25 @@
+                     singleLine = true
+                 )
+-                Row(
+-                Divider(modifier = Modifier.padding(vertical = 4.dp))
+-                Text("Критический срок (Юридический календарь)", style = MaterialTheme.typography.titleSmall)
+-                OutlinedTextField(
+-                    value = deadlineDate,
+-                    onValueChange = { deadlineDate = it },
+-                    label = { Text("Дата (ДД.ММ.ГГГГ)") },
+-                    modifier = Modifier.fillMaxWidth(),
+-                    singleLine = true
+-                )
+-                OutlinedTextField(
+-                    value = deadlineType,
+-                    onValueChange = { deadlineType = it },
+-                    label = { Text("Тип (например: Отмена приказа)") },
+-                    modifier = Modifier.fillMaxWidth(),
+-                    singleLine = true
+-                )
+-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+-                    modifier = Modifier.fillMaxWidth()
+-                ) {
++                Divider(modifier = Modifier.padding(vertical = 4.dp))
++                Text("Критический срок (Юридический календарь)", style = MaterialTheme.typography.titleSmall)
++                OutlinedTextField(
++                    value = deadlineDate,
++                    onValueChange = { deadlineDate = it },
++                    label = { Text("Дата (ДД.ММ.ГГГГ)") },
++                    modifier = Modifier.fillMaxWidth(),
++                    singleLine = true
++                )
++                OutlinedTextField(
++                    value = deadlineType,
++                    onValueChange = { deadlineType = it },
++                    label = { Text("Тип (например: Отмена приказа)") },
++                    modifier = Modifier.fillMaxWidth(),
++                    singleLine = true
++                )
++                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                     Checkbox(checked = isMortgage, onCheckedChange = { isMortgage = it })
+                     Text("Единственное жилье (Ипотека)")
+                 }
+                 Text(
