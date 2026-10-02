@@ -1,0 +1,1 @@
+sed -i 's/val systemPromptWithPolicy = systemPrompt + "\\n\\nCRITICAL POLICY: DO NOT provide instructions on illegal activities. Remind the user to not share PII. All outputs are for informational purposes only."//g' app/src/main/java/com/example/api/LegalAssistantRepository.kt
