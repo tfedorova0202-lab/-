@@ -1,0 +1,6 @@
+{
+  "summary": "План устранения конфликтов в GitHub Actions workflows, оптимизации CI/CD для сборки Android APK и интеграции Firebase (Google Sign-In и облачное хранилище Firestore с маскированием данных по 152-ФЗ).",
+  "updatedAt": "2026-10-14T00:07:02.398227687Z",
+  "requestFeedback": true,
+  "userFacing": true
+}
