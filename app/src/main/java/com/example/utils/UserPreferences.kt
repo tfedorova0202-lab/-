@@ -59,6 +59,16 @@ class UserPreferences(context: Context) {
     fun getMonthlyIncome(): Float = prefs.getFloat("MONTHLY_INCOME", 0f)
     fun getMonthlyExpenses(): Float = prefs.getFloat("MONTHLY_EXPENSES", 0f)
 
+    fun isIncognitoMode(): Boolean = prefs.getBoolean("INCOGNITO_MODE", true)
+    fun setIncognitoMode(enabled: Boolean) {
+        prefs.edit().putBoolean("INCOGNITO_MODE", enabled).apply()
+    }
+
+    fun isHideFamilyInfo(): Boolean = prefs.getBoolean("HIDE_FAMILY_INFO", true)
+    fun setHideFamilyInfo(enabled: Boolean) {
+        prefs.edit().putBoolean("HIDE_FAMILY_INFO", enabled).apply()
+    }
+
     fun clearAllUserData() {
         prefs.edit().clear().apply()
     }

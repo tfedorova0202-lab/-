@@ -358,8 +358,16 @@ fun ProfileDialog(
                     Button(onClick = {
                         scope.launch {
                             syncStatus = "Синхронизация..."
-                            val firestore = FirestoreManager()
-                            syncStatus = "Синхронизировано с облаком!"
+                            val firestore = FirestoreManager(context)
+                            try {
+                                val debts = db.debtDao().getAllDebtsList()
+                                for (debt in debts) {
+                                    firestore.saveDebt(debt)
+                                }
+                                syncStatus = "Синхронизировано с облаком Firestore (${debts.size} записей)"
+                            } catch (e: Exception) {
+                                syncStatus = "Офлайн-режим (сохранено на устройстве)"
+                            }
                         }
                     }) {
                         Text("Синхронизировать")

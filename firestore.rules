@@ -1,0 +1,83 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net: Default-deny all unexpected collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidUserProfile(data) {
+      return data.userId == request.auth.uid &&
+             (!('email' in data) || (data.email is string && data.email.size() <= 200)) &&
+             (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 100)) &&
+             data.isIncognito is bool &&
+             data.hideFamilyInfo is bool &&
+             (!('createdAt' in data) || (data.createdAt is timestamp && data.createdAt <= request.time)) &&
+             (!('updatedAt' in data) || (data.updatedAt is timestamp && data.updatedAt <= request.time));
+    }
+
+    function isValidDebt(data) {
+      return data.id is string && isValidId(data.id) &&
+             data.creditorName is string && data.creditorName.size() > 0 && data.creditorName.size() <= 150 &&
+             data.contractDate is string && data.contractDate.size() <= 100 &&
+             data.factAmount is number && data.factAmount >= 0 &&
+             (!('penaltyAmount' in data) || (data.penaltyAmount is number && data.penaltyAmount >= 0)) &&
+             (!('insuranceAmount' in data) || (data.insuranceAmount is number && data.insuranceAmount >= 0)) &&
+             data.planAmount is number && data.planAmount >= 0 &&
+             data.status in ['ACTIVE', 'CLOSED', 'COURT_ORDER', 'COLLECTORS', 'DISPUTED', 'CANCELLED'] &&
+             (!('isMortgage' in data) || data.isMortgage is bool) &&
+             (!('deadlineDate' in data) || (data.deadlineDate is string && data.deadlineDate.size() <= 50)) &&
+             (!('deadlineType' in data) || (data.deadlineType is string && data.deadlineType.size() <= 50)) &&
+             (!('legalBasis' in data) || (data.legalBasis is string && data.legalBasis.size() <= 200)) &&
+             (!('createdAt' in data) || (data.createdAt is timestamp && data.createdAt <= request.time)) &&
+             (!('updatedAt' in data) || (data.updatedAt is timestamp && data.updatedAt <= request.time));
+    }
+
+    function isValidLegalAction(data) {
+      return data.id is string && isValidId(data.id) &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
+             data.actionType in ['CANCEL_COURT_ORDER', 'REVOKE_THIRD_PARTY_CONSENT', 'REFUSE_INTERACTION', 'REDUCE_PENALTIES', 'MORTGAGE_SHIELD', 'BKI_DISPUTE'] &&
+             (!('creditorName' in data) || (data.creditorName is string && data.creditorName.size() <= 150)) &&
+             data.status in ['DRAFT', 'READY', 'SENT', 'SATISFIED', 'REJECTED'] &&
+             (!('deadlineDate' in data) || (data.deadlineDate is string && data.deadlineDate.size() <= 50)) &&
+             (!('documentContent' in data) || (data.documentContent is string && data.documentContent.size() <= 20000)) &&
+             (!('createdAt' in data) || (data.createdAt is timestamp && data.createdAt <= request.time)) &&
+             (!('updatedAt' in data) || (data.updatedAt is timestamp && data.updatedAt <= request.time));
+    }
+
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow list: if false; // User profiles cannot be listed
+      allow create: if isOwner(userId) && isValidUserProfile(request.resource.data);
+      allow update: if isOwner(userId) && isValidUserProfile(request.resource.data);
+      allow delete: if isOwner(userId);
+
+      match /debts/{debtId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidId(debtId) && debtId == request.resource.data.id && isValidDebt(request.resource.data);
+        allow update: if isOwner(userId) && isValidId(debtId) && debtId == request.resource.data.id && isValidDebt(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      match /legal_actions/{actionId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidId(actionId) && actionId == request.resource.data.id && isValidLegalAction(request.resource.data);
+        allow update: if isOwner(userId) && isValidId(actionId) && actionId == request.resource.data.id && isValidLegalAction(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+    }
+  }
+}

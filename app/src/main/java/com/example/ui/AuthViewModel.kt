@@ -5,6 +5,7 @@ import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.api.FirebaseAuthManager
+import com.example.api.FirestoreManager
 import com.example.utils.UserPreferences
 import com.google.firebase.auth.FirebaseUser
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,6 +15,7 @@ import kotlinx.coroutines.launch
 class AuthViewModel(application: Application) : AndroidViewModel(application) {
     private val authManager = FirebaseAuthManager()
     private val userPrefs = UserPreferences(application)
+    private val firestoreManager = FirestoreManager(application)
 
     private val _currentUser = MutableStateFlow<FirebaseUser?>(authManager.currentUser)
     val currentUser: StateFlow<FirebaseUser?> = _currentUser
@@ -21,12 +23,9 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     private val _isGuest = MutableStateFlow(userPrefs.getAuthType() == "GUEST")
     val isGuest: StateFlow<Boolean> = _isGuest
 
-    private val _isCustomAuthenticated = MutableStateFlow(userPrefs.isLoggedIn())
-    val isCustomAuthenticated: StateFlow<Boolean> = _isCustomAuthenticated
-
     private val _authIdentifier = MutableStateFlow(
         authManager.currentUser?.email 
-            ?: authManager.currentUser?.phoneNumber 
+            ?: authManager.currentUser?.displayName
             ?: userPrefs.getAuthIdentifier().takeIf { it.isNotBlank() } 
             ?: if (userPrefs.getAuthType() == "GUEST") "Инкогнито (Офлайн)" else ""
     )
@@ -36,120 +35,13 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     val authType: StateFlow<String> = _authType
 
     val isUserLoggedIn: Boolean
-        get() = _currentUser.value != null || _isCustomAuthenticated.value || _isGuest.value
+        get() = _currentUser.value != null || _isGuest.value
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading
 
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error
-
-    fun signInWithEmail(email: String, pass: String, isRegister: Boolean) {
-        val trimmedEmail = email.trim()
-        val trimmedPass = pass.trim()
-        if (trimmedEmail.isEmpty() || !trimmedEmail.contains("@") || !trimmedEmail.contains(".")) {
-            _error.value = "Введите корректный адрес электронной почты"
-            return
-        }
-        if (trimmedPass.length < 6) {
-            _error.value = "Пароль должен содержать не менее 6 символов"
-            return
-        }
-
-        viewModelScope.launch {
-            _isLoading.value = true
-            _error.value = null
-
-            // Пробуем Firebase Auth, если доступен
-            val firebaseResult = if (isRegister) {
-                authManager.signUpWithEmail(trimmedEmail, trimmedPass)
-            } else {
-                authManager.signInWithEmail(trimmedEmail, trimmedPass)
-            }
-
-            if (firebaseResult.isSuccess) {
-                _currentUser.value = authManager.currentUser
-                _authIdentifier.value = trimmedEmail
-                _authType.value = "EMAIL"
-                _isCustomAuthenticated.value = true
-                userPrefs.saveAuthSession("EMAIL", trimmedEmail)
-                if (userPrefs.getName().isBlank()) {
-                    userPrefs.saveProfile(trimmedEmail.substringBefore("@"), userPrefs.getAddress(), userPrefs.getPhone())
-                }
-            } else {
-                // Если Firebase не настроен в текущем окружении/демо-режиме, сохраняем локальную защищенную сессию
-                _authIdentifier.value = trimmedEmail
-                _authType.value = "EMAIL"
-                _isCustomAuthenticated.value = true
-                userPrefs.saveAuthSession("EMAIL", trimmedEmail)
-                if (userPrefs.getName().isBlank()) {
-                    userPrefs.saveProfile(trimmedEmail.substringBefore("@"), userPrefs.getAddress(), userPrefs.getPhone())
-                }
-            }
-            _isLoading.value = false
-        }
-    }
-
-    private val _verificationCode = MutableStateFlow<String?>(null)
-    val verificationCode: StateFlow<String?> = _verificationCode
-
-    private val _codeSentPhone = MutableStateFlow<String?>(null)
-    val codeSentPhone: StateFlow<String?> = _codeSentPhone
-
-    fun sendVerificationSmsCode(phone: String): Boolean {
-        val cleanedPhone = phone.trim()
-        if (cleanedPhone.length < 10) {
-            _error.value = "Введите корректный номер мобильного телефона"
-            return false
-        }
-        val generatedCode = (1000..9999).random().toString()
-        _verificationCode.value = generatedCode
-        _codeSentPhone.value = cleanedPhone
-        _error.value = null
-        return true
-    }
-
-    fun resetVerification() {
-        _verificationCode.value = null
-        _codeSentPhone.value = null
-    }
-
-    fun signInWithPhone(phone: String, smsCode: String) {
-        val cleanedPhone = phone.trim()
-        val cleanedCode = smsCode.trim()
-        if (cleanedPhone.length < 10) {
-            _error.value = "Введите корректный номер телефона (не менее 10 цифр)"
-            return
-        }
-        if (cleanedCode.length < 4) {
-            _error.value = "Введите 4-значный код подтверждения"
-            return
-        }
-
-        val expectedCode = _verificationCode.value
-        if (expectedCode != null && cleanedCode != expectedCode) {
-            _error.value = "Неверный проверочный код. Проверьте отправленный код и повторите ввод."
-            return
-        }
-
-        viewModelScope.launch {
-            _isLoading.value = true
-            _error.value = null
-
-            // Локальная защищенная авторизация по номеру телефона
-            _authIdentifier.value = cleanedPhone
-            _authType.value = "PHONE"
-            _isCustomAuthenticated.value = true
-            userPrefs.saveAuthSession("PHONE", cleanedPhone)
-            if (userPrefs.getPhone().isBlank()) {
-                userPrefs.saveProfile(userPrefs.getName(), userPrefs.getAddress(), cleanedPhone)
-            }
-
-            _verificationCode.value = null
-            _codeSentPhone.value = null
-            _isLoading.value = false
-        }
-    }
 
     fun signInWithGoogle(context: Context) {
         viewModelScope.launch {
@@ -158,14 +50,25 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
             val result = authManager.signInWithGoogle(context)
             if (result.isSuccess) {
-                _currentUser.value = authManager.currentUser
-                val email = authManager.currentUser?.email ?: "Google Account"
-                _authIdentifier.value = email
+                val user = authManager.currentUser
+                _currentUser.value = user
+                val emailOrName = user?.email ?: user?.displayName ?: "Google Account"
+                _authIdentifier.value = emailOrName
                 _authType.value = "GOOGLE"
-                _isCustomAuthenticated.value = true
-                userPrefs.saveAuthSession("GOOGLE", email)
+                _isGuest.value = false
+                userPrefs.saveAuthSession("GOOGLE", emailOrName)
+                
+                // Synchronize incognito & family security preferences to Firestore
+                val isIncognito = userPrefs.isIncognitoMode()
+                val hideFamily = userPrefs.isHideFamilyInfo()
+                firestoreManager.saveUserProfile(isIncognito, hideFamily)
             } else {
-                _error.value = result.exceptionOrNull()?.message ?: "Не удалось войти через Google"
+                val ex = result.exceptionOrNull()
+                val msg = ex?.message ?: "Не удалось войти через Google"
+                // Do not show error on user cancellation
+                if (ex !is androidx.credentials.exceptions.GetCredentialCancellationException) {
+                    _error.value = msg
+                }
             }
 
             _isLoading.value = false
@@ -184,9 +87,11 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         userPrefs.clearAuthSession()
         _currentUser.value = null
         _isGuest.value = false
-        _isCustomAuthenticated.value = false
         _authIdentifier.value = ""
         _authType.value = ""
     }
-}
 
+    fun clearError() {
+        _error.value = null
+    }
+}

@@ -1,7 +1,9 @@
 package com.example
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.api.FirestoreManager
 import com.example.data.Debt
 import com.example.data.DebtDao
 import kotlinx.coroutines.flow.SharingStarted
@@ -10,9 +12,12 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.UUID
 
-class DebtCalculatorViewModel(private val dao: DebtDao) : ViewModel() {
+class DebtCalculatorViewModel(
+    private val dao: DebtDao,
+    private val firestoreManager: FirestoreManager? = null
+) : ViewModel() {
 
-    // 1. Получаем живой поток из базы данных. Если закроем приложение - данные останутся.
+    // 1. Получаем живой поток из базы данных (Room как офлайн-кеш)
     val debts = dao.getAllDebts().stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -29,13 +34,32 @@ class DebtCalculatorViewModel(private val dao: DebtDao) : ViewModel() {
     val totalPenalty = debts.map { list -> list.sumOf { it.penaltyAmount + it.insuranceAmount } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
 
-    // 3. Сохранение или обновление долга (Ядро расчетов План/Факт)
-    fun saveDebt(id: String?, creditorName: String, contractDate: String, factAmount: Double, penaltyAmount: Double, insuranceAmount: Double, isMortgage: Boolean, deadlineDate: String = "", deadlineType: String = "") {
+    // 3. Сохранение или обновление долга (Ядро расчетов План/Факт + синхронизация с облаком)
+    fun saveDebt(
+        id: String?,
+        creditorName: String,
+        contractDate: String,
+        factAmount: Double,
+        penaltyAmount: Double,
+        insuranceAmount: Double,
+        isMortgage: Boolean,
+        deadlineDate: String = "",
+        deadlineType: String = ""
+    ) {
         // Юридическая логика расчета: срезаем незаконные накрутки и страховки
         var currentPlan = factAmount - penaltyAmount - insuranceAmount
         if (currentPlan < 0) currentPlan = 0.0 // Защита от отрицательного долга
         
         val finalId = id ?: UUID.randomUUID().toString()
+        val legalBasisText = if (penaltyAmount > 0 && insuranceAmount > 0) {
+            "ст. 333 ГК РФ, ст. 958 ГК РФ"
+        } else if (penaltyAmount > 0) {
+            "ст. 333 ГК РФ"
+        } else if (insuranceAmount > 0) {
+            "ст. 958 ГК РФ, 353-ФЗ"
+        } else {
+            "ст. 809 ГК РФ"
+        }
         
         val debt = Debt(
             id = finalId,
@@ -48,11 +72,19 @@ class DebtCalculatorViewModel(private val dao: DebtDao) : ViewModel() {
             status = if (isMortgage) "Ипотека (Иммунитет)" else "В работе",
             isMortgage = isMortgage,
             deadlineDate = deadlineDate,
-            deadlineType = deadlineType
+            deadlineType = deadlineType,
+            legalBasis = legalBasisText
         )
         
         viewModelScope.launch {
-            dao.insertDebt(debt) // Сохраняем надежно в Room
+            dao.insertDebt(debt) // Сохраняем надежно в локальный Room
+            firestoreManager?.let { fs ->
+                try {
+                    fs.saveDebt(debt) // Синхронизируем в облако Firestore, если авторизован
+                } catch (e: Exception) {
+                    Log.w(TAG, "Cloud sync skipped: ${e.message}")
+                }
+            }
         }
     }
 
@@ -60,17 +92,39 @@ class DebtCalculatorViewModel(private val dao: DebtDao) : ViewModel() {
     fun deleteDebt(debt: Debt) {
         viewModelScope.launch {
             dao.deleteDebt(debt)
+            firestoreManager?.let { fs ->
+                try {
+                    fs.deleteDebt(debt.id)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Cloud delete skipped: ${e.message}")
+                }
+            }
         }
     }
 
-    // 5. Очистка реестра
+    // 5. Синхронизация с Firestore
+    fun syncWithFirestore() {
+        viewModelScope.launch {
+            firestoreManager?.let { fs ->
+                val cloudDebtsResult = fs.getDebts()
+                if (cloudDebtsResult.isSuccess) {
+                    val cloudDebts = cloudDebtsResult.getOrDefault(emptyList())
+                    for (cloudDebt in cloudDebts) {
+                        dao.insertDebt(cloudDebt)
+                    }
+                }
+            }
+        }
+    }
+
+    // 6. Очистка реестра
     fun clearAllDebts() {
         viewModelScope.launch {
             dao.clearAll()
         }
     }
 
-    // 6. Загрузка демонстрационных данных для макетов приложений и презентаций
+    // 7. Загрузка демонстрационных данных для макетов приложений и презентаций
     fun loadMockupPresentationData() {
         viewModelScope.launch {
             val sampleDebts = listOf(
@@ -85,7 +139,8 @@ class DebtCalculatorViewModel(private val dao: DebtDao) : ViewModel() {
                     status = "В работе (Претензия)",
                     isMortgage = false,
                     deadlineDate = "30.09.2026",
-                    deadlineType = "Период охлаждения"
+                    deadlineType = "Период охлаждения",
+                    legalBasis = "ст. 333 ГК РФ, ст. 958 ГК РФ"
                 ),
                 Debt(
                     id = "mockup-tbank",
@@ -96,7 +151,8 @@ class DebtCalculatorViewModel(private val dao: DebtDao) : ViewModel() {
                     insuranceAmount = 9000.0,
                     planAmount = 104000.0,
                     status = "В работе (ст. 333 ГК РФ)",
-                    isMortgage = false
+                    isMortgage = false,
+                    legalBasis = "ст. 333 ГК РФ"
                 ),
                 Debt(
                     id = "mockup-zaimer",
@@ -109,7 +165,8 @@ class DebtCalculatorViewModel(private val dao: DebtDao) : ViewModel() {
                     status = "Судебный приказ",
                     isMortgage = false,
                     deadlineDate = "29.09.2026",
-                    deadlineType = "10 дней (ст. 128 ГПК)"
+                    deadlineType = "10 дней (ст. 128 ГПК)",
+                    legalBasis = "ч. 23 ст. 5 ФЗ № 353-ФЗ"
                 ),
                 Debt(
                     id = "mockup-vtb-mortgage",
@@ -120,7 +177,8 @@ class DebtCalculatorViewModel(private val dao: DebtDao) : ViewModel() {
                     insuranceAmount = 0.0,
                     planAmount = 2400000.0,
                     status = "Ипотека (Иммунитет)",
-                    isMortgage = true
+                    isMortgage = true,
+                    legalBasis = "ст. 213.10-1 ФЗ № 127-ФЗ"
                 )
             )
             for (debt in sampleDebts) {
@@ -128,5 +186,8 @@ class DebtCalculatorViewModel(private val dao: DebtDao) : ViewModel() {
             }
         }
     }
-}
 
+    companion object {
+        private const val TAG = "DebtCalculatorVM"
+    }
+}

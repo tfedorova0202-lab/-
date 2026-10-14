@@ -1,0 +1,84 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User account profile and confidentiality settings",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Unique identifier of the user" },
+        "email": { "type": "string", "description": "Contact email address" },
+        "displayName": { "type": "string", "description": "User display name or alias" },
+        "isIncognito": { "type": "boolean", "description": "Incognito mode to protect family and spouse from debt disclosure" },
+        "hideFamilyInfo": { "type": "boolean", "description": "Strict suppression of third party notifications" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Account registration timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last profile update timestamp" }
+      },
+      "required": ["userId", "isIncognito", "hideFamilyInfo"]
+    },
+    "Debt": {
+      "title": "Debt",
+      "description": "Debt audit record comparing Fact (creditor demand) with Plan (legal debt after penalty/insurance cuts)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Document ID matching debt ID" },
+        "creditorName": { "type": "string", "description": "Name of bank, MFO, or collection agency" },
+        "contractDate": { "type": "string", "description": "Date or contract identifier" },
+        "factAmount": { "type": "number", "description": "Total amount claimed by creditor in rubles" },
+        "penaltyAmount": { "type": "number", "description": "Unlawful penalties, fines or fees subject to reduction under art 333 GK RF" },
+        "insuranceAmount": { "type": "number", "description": "Imposed insurance or additional commissions to return under art 958 GK RF" },
+        "planAmount": { "type": "number", "description": "Justified legal debt under art 333, 809 GK RF and 353-FZ" },
+        "status": {
+          "type": "string",
+          "enum": ["ACTIVE", "CLOSED", "COURT_ORDER", "COLLECTORS", "DISPUTED", "CANCELLED"],
+          "description": "Current procedural status of debt"
+        },
+        "isMortgage": { "type": "boolean", "description": "Whether the debt is secured by sole mortgage housing under art 213.10-1 FZ 127" },
+        "deadlineDate": { "type": "string", "description": "Procedural deadline date (e.g. 10 days for court order cancellation)" },
+        "deadlineType": { "type": "string", "description": "Type of deadline or procedural step" },
+        "legalBasis": { "type": "string", "description": "Specific statutory legal basis for debt reduction" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last update timestamp" }
+      },
+      "required": ["id", "creditorName", "contractDate", "factAmount", "planAmount", "status"]
+    },
+    "LegalAction": {
+      "title": "LegalAction",
+      "description": "Procedural legal motion or notice drafted for debt defense",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier of the procedural action" },
+        "title": { "type": "string", "description": "Descriptive title of the legal motion" },
+        "actionType": {
+          "type": "string",
+          "enum": ["CANCEL_COURT_ORDER", "REVOKE_THIRD_PARTY_CONSENT", "REFUSE_INTERACTION", "REDUCE_PENALTIES", "MORTGAGE_SHIELD", "BKI_DISPUTE"],
+          "description": "Procedural action classification"
+        },
+        "creditorName": { "type": "string", "description": "Target creditor or court jurisdiction" },
+        "status": {
+          "type": "string",
+          "enum": ["DRAFT", "READY", "SENT", "SATISFIED", "REJECTED"],
+          "description": "Filing status of the legal action"
+        },
+        "deadlineDate": { "type": "string", "description": "Statutory filing deadline" },
+        "documentContent": { "type": "string", "description": "Draft document body or petition text" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last update timestamp" }
+      },
+      "required": ["id", "title", "actionType", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profile with privacy protections and incognito settings"
+    },
+    "/users/{userId}/debts/{debtId}": {
+      "schema": { "$ref": "#/entities/Debt" },
+      "description": "User debt registry with fact vs plan audit calculations"
+    },
+    "/users/{userId}/legal_actions/{actionId}": {
+      "schema": { "$ref": "#/entities/LegalAction" },
+      "description": "Drafted procedural motions, court order cancellation petitions, and consent revocations"
+    }
+  }
+}

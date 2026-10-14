@@ -39,14 +39,15 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         
-        // 1. Инициализируем базу данных (защищенное хранилище на устройстве)
+        // 1. Инициализируем базу данных и облачный менеджер Firestore
         val db = AppDatabase.getDatabase(this)
+        val firestoreManager = com.example.api.FirestoreManager(this)
         
-        // 2. Создаем фабрику для передачи базы данных в ViewModel
+        // 2. Создаем фабрику для передачи базы данных и Firestore в ViewModel
         val factory = object : ViewModelProvider.Factory {
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 @Suppress("UNCHECKED_CAST")
-                return DebtCalculatorViewModel(db.debtDao()) as T
+                return DebtCalculatorViewModel(db.debtDao(), firestoreManager) as T
             }
         }
 
@@ -95,9 +96,14 @@ class MainActivity : ComponentActivity() {
                     val authViewModel: com.example.ui.AuthViewModel = viewModel()
                     val currentUser by authViewModel.currentUser.collectAsStateWithLifecycle()
                     val isGuest by authViewModel.isGuest.collectAsStateWithLifecycle()
-                    val isCustomAuth by authViewModel.isCustomAuthenticated.collectAsStateWithLifecycle()
 
-                    if (currentUser == null && !isGuest && !isCustomAuth) {
+                    LaunchedEffect(currentUser) {
+                        if (currentUser != null) {
+                            viewModel.syncWithFirestore()
+                        }
+                    }
+
+                    if (currentUser == null && !isGuest) {
                         com.example.ui.AuthScreen(
                             viewModel = authViewModel,
                             onAuthSuccess = { },
