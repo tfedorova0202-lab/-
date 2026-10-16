@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -88,6 +89,7 @@ class MainActivity : ComponentActivity() {
                     var isParsingBki by remember { mutableStateOf(false) }
                     var isScanning by remember { mutableStateOf(false) }
                     var bkiError by remember { mutableStateOf<String?>(null) }
+                    var bkiConsentChecked by remember { mutableStateOf(false) }
                     val context = LocalContext.current
                     val userPrefs = remember { UserPreferences(context) }
                     val scope = rememberCoroutineScope()
@@ -424,18 +426,76 @@ class MainActivity : ComponentActivity() {
 
                     if (showBkiDialog) {
                         AlertDialog(
-                            onDismissRequest = { showBkiDialog = false },
-                            title = { Text("Анализ БКИ (НБКИ/ОКБ)", style = MaterialTheme.typography.titleLarge) },
+                            onDismissRequest = { 
+                                showBkiDialog = false
+                                bkiConsentChecked = false
+                            },
+                            title = { 
+                                Text(
+                                    "Анализ отчета БКИ (НБКИ/ОКБ)", 
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                                ) 
+                            },
                             text = { 
-                                Text("Загрузите PDF-отчет из Бюро кредитных историй. Искусственный интеллект автоматически расшифрует ваши договоры, найдет суммы долгов и добавит их в реестр ПЛАН/ФАКТ.")
+                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Text(
+                                        text = "Вы можете загрузить официальную выписку из Бюро кредитных историй (PDF) для автоматического извлечения кредиторов, дат и сумм долга.",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                    Card(
+                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                                    ) {
+                                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            Text(
+                                                text = "🔒 Протокол приватности (152-ФЗ / GDPR):",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                            Text(
+                                                text = "• Страницы PDF обрабатываются по защищенному каналу (TLS 1.3) нейросетью Google Gemini исключительно для OCR-распознавания таблиц.\n" +
+                                                       "• Документ не сохраняется на сервере и не передается третьим лицам.\n" +
+                                                       "• Вы также можете использовать офлайн-сканер с камеры (ML Kit на устройстве) или внести долги вручную без передачи в сеть.",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { bkiConsentChecked = !bkiConsentChecked }
+                                    ) {
+                                        Checkbox(
+                                            checked = bkiConsentChecked,
+                                            onCheckedChange = { bkiConsentChecked = it }
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "Даю согласие на временную обработку страниц документа нейросетью для извлечения долгов",
+                                            style = MaterialTheme.typography.labelSmall
+                                        )
+                                    }
+                                }
                             },
                             confirmButton = {
-                                Button(onClick = { pdfPickerLauncher.launch("application/pdf") }) {
+                                Button(
+                                    onClick = { 
+                                        showBkiDialog = false
+                                        pdfPickerLauncher.launch("application/pdf") 
+                                    },
+                                    enabled = bkiConsentChecked
+                                ) {
                                     Text("Выбрать PDF-файл")
                                 }
                             },
                             dismissButton = {
-                                TextButton(onClick = { showBkiDialog = false }) {
+                                TextButton(onClick = { 
+                                    showBkiDialog = false
+                                    bkiConsentChecked = false
+                                }) {
                                     Text("Отмена")
                                 }
                             }

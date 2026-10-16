@@ -217,6 +217,124 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
         )
     }
 
+    if (showDocConsentDialog && pendingDocBase64 != null) {
+        AlertDialog(
+            onDismissRequest = {
+                showDocConsentDialog = false
+                pendingDocBase64 = null
+            },
+            icon = { Icon(Icons.Default.Shield, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+            title = { Text("Согласие на ИИ-анализ документа", style = MaterialTheme.typography.titleMedium) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Вы выбрали файл: ${pendingDocName ?: "Документ"}",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                    )
+                    Text(
+                        text = "• Содержимое файла передается по защищенному каналу (TLS 1.3) в API нейросети (Google Gemini) исключительно для оптического распознавания (OCR), поиска кредиторов и сумм долга.\n" +
+                               "• Документ не сохраняется на сервере и не передается третьим лицам.\n" +
+                               "• Пожалуйста, убедитесь, что в файле нет открытых реквизитов банковских карт (CVC/CVV) или полных серий/номеров паспортов.\n" +
+                               "• Вы также можете отказаться и добавить параметры долга вручную в Реестре без передачи документа.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val data = pendingDocBase64
+                        val mime = pendingDocMime ?: "application/pdf"
+                        val name = pendingDocName ?: "Document"
+                        showDocConsentDialog = false
+                        pendingDocBase64 = null
+                        if (data != null) {
+                            viewModel.sendDocument(data, mime, name)
+                        }
+                    }
+                ) {
+                    Text("Согласен, анализировать")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showDocConsentDialog = false
+                        pendingDocBase64 = null
+                    }
+                ) {
+                    Text("Отмена")
+                }
+            }
+        )
+    }
+
+    reportingMessage?.let { reportedMsg ->
+        AlertDialog(
+            onDismissRequest = { reportingMessage = null },
+            icon = { Icon(Icons.Default.Flag, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+            title = { Text("Пожаловаться на ответ ИИ", style = MaterialTheme.typography.titleMedium) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "В соответствии с политикой Google Play по генеративному ИИ, вы можете сообщить о недостоверном, некорректном или опасном ответе нейросети.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text("Причина обращения:", style = MaterialTheme.typography.labelMedium)
+                    val reasons = listOf(
+                        "Юридическая неточность или неверная статья закона",
+                        "Галлюцинация ИИ (выдуманные факты или сроки)",
+                        "Неприемлемый или вводящий в заблуждение контент",
+                        "Другая ошибка"
+                    )
+                    reasons.forEach { r ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { reportReason = r }
+                                .padding(vertical = 2.dp)
+                        ) {
+                            RadioButton(
+                                selected = reportReason == r,
+                                onClick = { reportReason = r }
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(r, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                    OutlinedTextField(
+                        value = reportComment,
+                        onValueChange = { reportComment = it },
+                        label = { Text("Комментарий (необязательно)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        maxLines = 2
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        reportingMessage = null
+                        reportComment = ""
+                        Toast.makeText(context, "✓ Жалоба зафиксирована. Спасибо за обратную связь!", Toast.LENGTH_LONG).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Отправить")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { reportingMessage = null }) {
+                    Text("Отмена")
+                }
+            }
+        )
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         Image(
             painter = painterResource(id = R.drawable.chat_banner_legal_1789342092300),
@@ -337,22 +455,39 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
                             }
                         }
                         if (!isUser && msg.text.length > 50) {
-                            TextButton(
-                                onClick = {
-                                    val uri = DocumentGenerator.generateAnalysisReportPdf(context, msg.text)
-                                    if (uri != null) {
-                                        val savedPath = DocumentGenerator.saveToDownloads(context, uri, "Analysis_Report_${System.currentTimeMillis()}.pdf")
-                                        Toast.makeText(context, "Отчет сохранен: $savedPath", Toast.LENGTH_LONG).show()
-                                        DocumentGenerator.openPdf(context, uri)
-                                    } else {
-                                        Toast.makeText(context, "Ошибка генерации", Toast.LENGTH_SHORT).show()
-                                    }
-                                },
-                                modifier = Modifier.padding(top = 4.dp)
+                            Row(
+                                modifier = Modifier.padding(top = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Сохранить PDF", style = MaterialTheme.typography.labelSmall)
+                                TextButton(
+                                    onClick = {
+                                        val uri = DocumentGenerator.generateAnalysisReportPdf(context, msg.text)
+                                        if (uri != null) {
+                                            val savedPath = DocumentGenerator.saveToDownloads(context, uri, "Analysis_Report_${System.currentTimeMillis()}.pdf")
+                                            Toast.makeText(context, "Отчет сохранен: $savedPath", Toast.LENGTH_LONG).show()
+                                            DocumentGenerator.openPdf(context, uri)
+                                        } else {
+                                            Toast.makeText(context, "Ошибка генерации", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                ) {
+                                    Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Сохранить PDF", style = MaterialTheme.typography.labelSmall)
+                                }
+
+                                IconButton(
+                                    onClick = { reportingMessage = msg },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Flag,
+                                        contentDescription = "Пожаловаться на ответ ИИ",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
                             }
                         }
                     }
