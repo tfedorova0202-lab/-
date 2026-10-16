@@ -96,11 +96,13 @@ object BkiParser {
         )
 
         try {
-            val apiKey = BuildConfig.GEMINI_API_KEY
+            val userPrefs = UserPreferences(context)
+            val customKey = userPrefs.getCustomGeminiApiKey().trim()
+            val apiKey = if (customKey.isNotBlank()) customKey else BuildConfig.GEMINI_API_KEY
             if (apiKey.isBlank() || apiKey == "MY_GEMINI_API_KEY") {
-                throw Exception("Не настроен GEMINI_API_KEY")
+                throw Exception("Для распознавания отчета БКИ через нейросеть укажите Gemini API ключ (в чате иконка ключа) или внесите данные вручную в Реестре.")
             }
-            val response = RetrofitClient.service.generateContent("gemini-3.1-pro-preview", apiKey, request)
+            val response = RetrofitClient.service.generateContent("gemini-2.5-flash", apiKey, request)
             val jsonText = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text ?: "[]"
             
             // Clean possible markdown code fences

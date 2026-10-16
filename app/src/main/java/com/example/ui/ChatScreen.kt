@@ -24,12 +24,17 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import android.widget.Toast
 import com.example.utils.DocumentGenerator
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.Shield
 import com.example.R
 
 @Composable
@@ -42,6 +47,13 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
     var showApiKeyDialog by remember { mutableStateOf(false) }
     var showDisclaimerDialog by remember { mutableStateOf(false) }
     var showClearHistoryDialog by remember { mutableStateOf(false) }
+    var reportingMessage by remember { mutableStateOf<com.example.ui.ChatMessage?>(null) }
+    var reportReason by remember { mutableStateOf("Юридическая неточность в норме закона") }
+    var reportComment by remember { mutableStateOf("") }
+    var showDocConsentDialog by remember { mutableStateOf(false) }
+    var pendingDocBase64 by remember { mutableStateOf<String?>(null) }
+    var pendingDocMime by remember { mutableStateOf<String?>(null) }
+    var pendingDocName by remember { mutableStateOf<String?>(null) }
     var tempKeyInput by remember { mutableStateOf(customKey) }
     val context = LocalContext.current
 
@@ -67,7 +79,10 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
                                 }
                             }
                         }
-                        viewModel.sendDocument(base64Data, mimeType, fileName)
+                        pendingDocBase64 = base64Data
+                        pendingDocMime = mimeType
+                        pendingDocName = fileName
+                        showDocConsentDialog = true
                     } else {
                         Toast.makeText(context, "Не удалось прочитать файл", Toast.LENGTH_SHORT).show()
                     }
@@ -81,18 +96,22 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
     }
     
     val macroChips = listOf(
+        "/MENU",
+        "/ПЛАН_ФАКТ",
+        "/ПРИВАТНОСТЬ",
+        "/БКИ_АНАЛИЗ",
+        "/СНИЖЕНИЕ_СТОИМОСТИ",
+        "/ИПОТЕКА_ЩИТ",
+        "/РЕЕСТР_ДОЛГОВ",
+        "/ПРАВО",
+        "/АУДИТ_ДОК",
+        "/АНТИКОЛЛЕКТОР",
+        "/ПРОЦЕСС_ДОКУМЕНТ",
         "/ПРОВЕРКА_МФО",
         "/КАЛЕНДАРЬ",
         "/МАРКЕТ",
-        "/АУДИТ_ДОК",
-        "/ПЛАН_ФАКТ",
-        "/АНТИКОЛЛЕКТОР",
-        "/ПРИВАТНОСТЬ",
-        "/СНИЖЕНИЕ_СТОИМОСТИ",
-        "/ИПОТЕКА_ЩИТ",
         "/ДИСКЛЕЙМЕР",
         "/ПОЛИТИКА",
-        "/MENU",
         "/ОЧИСТИТЬ"
     )
 
@@ -291,6 +310,7 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
                     horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
                 ) {
                     Column {
+                        val hasTable = msg.text.contains("|")
                         Box(
                             modifier = Modifier
                                 .background(
@@ -298,13 +318,23 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
                                     shape = RoundedCornerShape(12.dp)
                                 )
                                 .padding(12.dp)
-                                .widthIn(max = 300.dp)
+                                .widthIn(max = if (hasTable) 580.dp else 320.dp)
                         ) {
-                            Text(
-                                text = msg.text,
-                                color = if (isUser) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSecondaryContainer,
-                                style = MaterialTheme.typography.bodyMedium
-                            )
+                            if (hasTable) {
+                                Box(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                                    Text(
+                                        text = msg.text,
+                                        color = if (isUser) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSecondaryContainer,
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace)
+                                    )
+                                }
+                            } else {
+                                Text(
+                                    text = msg.text,
+                                    color = if (isUser) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSecondaryContainer,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
                         }
                         if (!isUser && msg.text.length > 50) {
                             TextButton(

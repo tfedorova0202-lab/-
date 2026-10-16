@@ -6,8 +6,9 @@
    See https://developer.android.com/about/versions/12/backup-restore
 -->
 <full-backup-content>
-    <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+    <!-- Защита персональных и финансовых данных: исключение БД долгов и настроек из резервных копий -->
+    <exclude domain="database" path="app_database" />
+    <exclude domain="database" path="app_database-wal" />
+    <exclude domain="database" path="app_database-shm" />
+    <exclude domain="sharedpref" path="user_prefs.xml" />
 </full-backup-content>

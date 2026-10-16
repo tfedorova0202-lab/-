@@ -98,7 +98,7 @@ fun AuthScreen(
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "Данные ваших кредитов и расчетов зашифрованы. Родственники и супруг защищены от звонков коллекторов по ст. 4 ФЗ № 230-ФЗ.",
+                        text = "Данные ваших кредитов и расчетов защищены системной песочницей Android. Родственники и супруг защищены от звонков коллекторов по ст. 4 ФЗ № 230-ФЗ.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -178,7 +178,7 @@ fun AuthScreen(
                     }
 
                     Text(
-                        text = "В режиме «Инкогнито» все расчеты и договоры хранятся исключительно в зашифрованной локальной памяти устройства без передачи в облако.",
+                        text = "В режиме «Инкогнито» все расчеты и договоры хранятся исключительно в изолированной локальной памяти устройства без передачи в облако.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
