@@ -5,13 +5,19 @@
 -->
 <data-extraction-rules>
     <cloud-backup>
-        <!-- Защита персональных и финансовых данных: исключение БД долгов и настроек из облачного бэкапа -->
-        <exclude domain="database" path="app_database" />
-        <exclude domain="database" path="app_database-wal" />
-        <exclude domain="database" path="app_database-shm" />
-        <exclude domain="sharedpref" path="user_prefs.xml" />
+        <!-- Полное исключение всех хранилищ (Room debts_database*, кэш Firestore firestore.*, Firebase Auth, user_prefs.xml, отчеты) -->
+        <exclude domain="root" path="." />
+        <exclude domain="file" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="external" path="." />
     </cloud-backup>
     <device-transfer>
-        <exclude domain="sharedpref" path="user_prefs.xml" />
+        <!-- Полное исключение чувствительных данных, кэша Firestore и PIN-хэша из D2D-переноса -->
+        <exclude domain="root" path="." />
+        <exclude domain="file" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="external" path="." />
     </device-transfer>
 </data-extraction-rules>

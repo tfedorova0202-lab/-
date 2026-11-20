@@ -45,19 +45,20 @@ fun CbrMfoCheckDialog(
     )
 
     AlertDialog(
+        properties = SecureUiHelper.dialogProperties(context),
         onDismissRequest = onDismiss,
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     imageVector = Icons.Default.VerifiedUser,
-                    contentDescription = "Реестр ЦБ РФ",
+                    contentDescription = "Справочник МФО",
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(28.dp)
                 )
                 Spacer(modifier = Modifier.width(10.dp))
                 Column {
-                    Text("Проверка МФО в ЦБ РФ", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Text("Государственный реестр Банка России", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Проверка МФО", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text("Локальный справочник (сверяйте актуальный статус на cbr.ru)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         },

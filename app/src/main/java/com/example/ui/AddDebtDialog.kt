@@ -31,7 +31,9 @@ fun AddDebtDialog(
     var penaltyAmountError by remember { mutableStateOf(false) }
     var insuranceAmountError by remember { mutableStateOf(false) }
 
+    val context = androidx.compose.ui.platform.LocalContext.current
     AlertDialog(
+        properties = SecureUiHelper.dialogProperties(context),
         onDismissRequest = onDismiss,
         title = { Text(if (initialDebt == null) "Добавить кредитора" else "Редактировать запись", style = MaterialTheme.typography.titleLarge) },
         text = {
@@ -123,8 +125,8 @@ fun AddDebtDialog(
                     Text("Единственное жилье (Ипотека)")
                 }
                 Text(
-                    text = "Законная справка: Введенные пени будут отменены (ст. 333 ГК РФ). Страховка возвращена (ст. 958 ГК РФ). Ипотека будет защищена.", 
-                    style = MaterialTheme.typography.bodySmall, 
+                    text = "Справочно: снижение неустойки по ст. 333 ГК РФ применяется судом по заявлению должника; возврат страховки (ст. 958 ГК РФ, 353-ФЗ) и мировое соглашение по ипотеке (ст. 213.10-1 ФЗ-127) требуют соблюдения условий закона.",
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary
                 )
             }

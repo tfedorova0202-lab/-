@@ -27,9 +27,11 @@ fun DebtProtectionDialog(
     onGenerateLackOfFunds: () -> Unit,
     onGenerateInsuranceReturn: () -> Unit
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        properties = SecureUiHelper.bottomSheetProperties(context)
     ) {
         Column(
             modifier = Modifier

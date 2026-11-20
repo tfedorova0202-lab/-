@@ -8,6 +8,14 @@ import kotlinx.coroutines.tasks.await
 
 object DocumentScanner {
     
+    /**
+     * ВАЖНОЕ ОГРАНИЧЕНИЕ OCR:
+     * Используемый движок ML Kit (`com.google.mlkit:text-recognition:16.0.1`, Latin)
+     * официально распознаёт только латиницу и арабские цифры (даты и суммы),
+     * но НЕ поддерживает кириллицу в русских договорах и справках БКИ.
+     * Для кириллического текста требуется либо ввод названия кредитора вручную,
+     * либо полноценный кириллический OCR (Tesseract/PaddleOCR/серверный OCR).
+     */
     suspend fun parseDebtFromBitmap(bitmap: Bitmap): ScannedDebtResult {
         val image = InputImage.fromBitmap(bitmap, 0)
         val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
@@ -18,14 +26,15 @@ object DocumentScanner {
             
             val dateRegex = """(\d{2}\.\d{2}\.\d{4})""".toRegex()
             val amountRegex = """(\d{1,3}(?:[ \s]?\d{3})*(?:[.,]\d{2})?)""".toRegex()
-            val contractDate = dateRegex.find(text)?.value ?: "01.01.2024"
+            val contractDate = dateRegex.find(text)?.value ?: ""
             
-            val creditorKeywords = listOf("банк", "мфо", "мкк", "ооо", "пао", "ао")
-            var creditorName = "Неизвестный кредитор"
+            // Подбираем латинизированные/транслитерированные бренды или просим проверить вручную
+            val creditorKeywords = listOf("bank", "sber", "tinkoff", "alfa", "vtb", "mfo", "zaim", "money", "банк", "мфо", "мкк", "ооо", "пао", "ао")
+            var creditorName = "Укажите кредитора вручную (OCR: только цифры/латиница)"
             for (line in result.textBlocks.flatMap { it.lines }) {
                 val lineText = line.text.lowercase()
                 if (creditorKeywords.any { lineText.contains(it) }) {
-                    creditorName = line.text.take(30)
+                    creditorName = line.text.take(40)
                     break
                 }
             }
@@ -40,11 +49,17 @@ object DocumentScanner {
             return ScannedDebtResult(
                 creditorName = creditorName,
                 contractDate = contractDate,
-                factAmount = factAmount
+                factAmount = factAmount,
+                cyrillicLimitationNotice = "Встроенный ML Kit OCR распознаёт только цифры и латиницу; проверьте название кредитора и даты вручную."
             )
-        } catch (e: Exception) {
-            e.printStackTrace()
-            throw Exception("Ошибка распознавания текста: ${e.message}")
+        } catch (e: Throwable) {
+            throw Exception("Распознавание с камеры недоступно (требуется GMS/ML Kit). Внесите параметры долга вручную.")
+        } finally {
+            try {
+                recognizer.close()
+            } catch (_: Throwable) {
+                // ignore
+            }
         }
     }
 }
@@ -52,5 +67,6 @@ object DocumentScanner {
 data class ScannedDebtResult(
     val creditorName: String,
     val contractDate: String,
-    val factAmount: Double
+    val factAmount: Double,
+    val cyrillicLimitationNotice: String = ""
 )

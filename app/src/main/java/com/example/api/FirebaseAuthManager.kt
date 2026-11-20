@@ -5,28 +5,47 @@ import android.util.Log
 import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
+import androidx.credentials.exceptions.GetCredentialProviderConfigurationException
+import androidx.credentials.exceptions.NoCredentialException
 import com.example.BuildConfig
-import com.example.R
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.firebase.Firebase
 import com.google.firebase.auth.AuthResult
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthRecentLoginRequiredException
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.auth
 import kotlinx.coroutines.tasks.await
 
+sealed class AccountDeleteOutcome {
+    object Deleted : AccountDeleteOutcome()
+    object NoActiveAccount : AccountDeleteOutcome()
+    object RequiresRecentLogin : AccountDeleteOutcome()
+    data class Failed(val reason: String) : AccountDeleteOutcome()
+}
+
 class FirebaseAuthManager {
     val auth: FirebaseAuth get() = Firebase.auth
-    val currentUser get() = auth.currentUser
+    val currentUser get() = try {
+        auth.currentUser
+    } catch (_: Throwable) {
+        null
+    }
 
     /**
      * Interactive Google Sign-In via Jetpack CredentialManager using GetSignInWithGoogleOption.
-     * Catches GetCredentialCancellationException cleanly to prevent UI hangs.
+     * Degrades cleanly on non-GMS devices (RuStore/Huawei) and handles cancellations gracefully.
      */
     suspend fun signInWithGoogle(context: Context): Result<AuthResult> {
-        val credentialManager = CredentialManager.create(context)
-        
+        val credentialManager = try {
+            CredentialManager.create(context)
+        } catch (e: Throwable) {
+            return Result.failure(
+                IllegalStateException("Сервисы Google Play (GMS) недоступны на устройстве. Используйте режим «Инкогнито» (офлайн).")
+            )
+        }
+
         // Resolve Web Client ID from generated resources or BuildConfig
         val webClientId = try {
             val resId = context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
@@ -42,7 +61,7 @@ class FirebaseAuthManager {
         }
 
         if (webClientId.isBlank()) {
-            return Result.failure(IllegalStateException("Google Web Client ID is not configured"))
+            return Result.failure(IllegalStateException("Google Web Client ID не настроен. Используйте режим «Инкогнито»."))
         }
 
         val signInWithGoogleOption = GetSignInWithGoogleOption.Builder(serverClientId = webClientId)
@@ -61,26 +80,48 @@ class FirebaseAuthManager {
                 val idToken = googleIdTokenCredential.idToken
                 val firebaseCredential = GoogleAuthProvider.getCredential(idToken, null)
                 val authResult = auth.signInWithCredential(firebaseCredential).await()
-                Log.d(TAG, "Google Sign-In successful for uid: ${authResult.user?.uid}")
                 Result.success(authResult)
             } else {
-                Result.failure(IllegalStateException("Unexpected credential type: ${credential.type}"))
+                Result.failure(IllegalStateException("Неподдерживаемый тип учетных данных"))
             }
         } catch (e: GetCredentialCancellationException) {
-            Log.w(TAG, "Google Sign-In was cancelled by user")
             Result.failure(e)
+        } catch (e: GetCredentialProviderConfigurationException) {
+            if (BuildConfig.DEBUG) Log.w(TAG, "Credential provider unavailable (non-GMS device)")
+            Result.failure(
+                IllegalStateException("Вход через Google недоступен без Google Play Services (GMS). Продолжите в режиме «Инкогнито» (офлайн).")
+            )
+        } catch (e: NoCredentialException) {
+            Result.failure(
+                IllegalStateException("На устройстве не найден активный Google-аккаунт. Вы можете продолжить в режиме «Инкогнито».")
+            )
+        } catch (e: Throwable) {
+            if (BuildConfig.DEBUG) Log.w(TAG, "Google Sign-In failed: ${e.javaClass.simpleName}")
+            Result.failure(
+                IllegalStateException("Не удалось войти через Google (проверьте наличие GMS и доступ к googleapis.com). Доступен режим «Инкогнито».")
+            )
+        }
+    }
+
+    suspend fun deleteCurrentAccount(): AccountDeleteOutcome {
+        val user = currentUser ?: return AccountDeleteOutcome.NoActiveAccount
+        return try {
+            user.delete().await()
+            AccountDeleteOutcome.Deleted
+        } catch (_: FirebaseAuthRecentLoginRequiredException) {
+            if (BuildConfig.DEBUG) Log.w(TAG, "Firebase Auth deletion requires recent re-authentication")
+            AccountDeleteOutcome.RequiresRecentLogin
         } catch (e: Exception) {
-            Log.e(TAG, "Google Sign-In failed", e)
-            Result.failure(e)
+            if (BuildConfig.DEBUG) Log.w(TAG, "Failed to delete Firebase Auth account: ${e.javaClass.simpleName}")
+            AccountDeleteOutcome.Failed(e.javaClass.simpleName)
         }
     }
 
     fun signOut() {
         try {
             auth.signOut()
-            Log.d(TAG, "User signed out successfully")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error during signOut", e)
+        } catch (e: Throwable) {
+            if (BuildConfig.DEBUG) Log.w(TAG, "Error during signOut: ${e.javaClass.simpleName}")
         }
     }
 

@@ -39,8 +39,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        
-        // 1. Инициализируем базу данных и облачный менеджер Firestore
+        com.example.ui.SecureUiHelper.syncActivitySecureFlag(this)
+
+        // 1. Инициализируем локальную БД и ленивый облачный менеджер Firestore
         val db = AppDatabase.getDatabase(this)
         val firestoreManager = com.example.api.FirestoreManager(this)
         
@@ -93,7 +94,7 @@ class MainActivity : ComponentActivity() {
                     val context = LocalContext.current
                     val userPrefs = remember { UserPreferences(context) }
                     val scope = rememberCoroutineScope()
-                    var isAppUnlocked by remember { mutableStateOf(userPrefs.getPin().isEmpty()) }
+                    var isAppUnlocked by remember { mutableStateOf(!userPrefs.hasPin()) }
 
                     val authViewModel: com.example.ui.AuthViewModel = viewModel()
                     val currentUser by authViewModel.currentUser.collectAsStateWithLifecycle()
@@ -114,9 +115,9 @@ class MainActivity : ComponentActivity() {
                         return@Surface
                     }
 
-                    if (!isAppUnlocked && userPrefs.getPin().isNotEmpty()) {
+                    if (!isAppUnlocked && userPrefs.hasPin()) {
                         com.example.ui.PinScreen(
-                            expectedPin = userPrefs.getPin(),
+                            verifyPin = { candidate -> userPrefs.verifyPin(candidate) },
                             onUnlock = { isAppUnlocked = true }
                         )
                         return@Surface
@@ -261,15 +262,7 @@ class MainActivity : ComponentActivity() {
                                         onClearAllDebts = { viewModel.clearAllDebts() },
                                         onOpenStorePublishingClick = { showStorePublishingDialog = true },
                                         onFullDataReset = {
-                                            viewModel.clearAllDebts()
-                                            scope.launch {
-                                                try {
-                                                    db.messageDao().clearHistory()
-                                                    db.queryHistoryDao().clearHistory()
-                                                } catch (e: Exception) {
-                                                    e.printStackTrace()
-                                                }
-                                            }
+                                            com.example.ui.SecureUiHelper.syncActivitySecureFlag(context)
                                         },
                                         onDismiss = { currentTab = AppTab.REGISTRY }
                                     )
@@ -426,18 +419,19 @@ class MainActivity : ComponentActivity() {
 
                     if (showBkiDialog) {
                         AlertDialog(
-                            onDismissRequest = { 
+                            properties = com.example.ui.SecureUiHelper.dialogProperties(context),
+                            onDismissRequest = {
                                 showBkiDialog = false
                                 bkiConsentChecked = false
                             },
-                            title = { 
+                            title = {
                                 Text(
-                                    "Анализ отчета БКИ (НБКИ/ОКБ)", 
+                                    "Анализ отчета БКИ (НБКИ/ОКБ)",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
-                                ) 
+                                )
                             },
-                            text = { 
+                            text = {
                                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                     Text(
                                         text = "Вы можете загрузить официальную выписку из Бюро кредитных историй (PDF) для автоматического извлечения кредиторов, дат и сумм долга.",
@@ -448,15 +442,15 @@ class MainActivity : ComponentActivity() {
                                     ) {
                                         Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                             Text(
-                                                text = "🔒 Протокол приватности (152-ФЗ / GDPR):",
+                                                text = "🔒 Раскрытие обработки данных (ст. 9, 12 ФЗ № 152-ФЗ):",
                                                 style = MaterialTheme.typography.labelSmall,
                                                 fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
                                                 color = MaterialTheme.colorScheme.primary
                                             )
                                             Text(
-                                                text = "• Страницы PDF обрабатываются по защищенному каналу (TLS 1.3) нейросетью Google Gemini исключительно для OCR-распознавания таблиц.\n" +
-                                                       "• Документ не сохраняется на сервере и не передается третьим лицам.\n" +
-                                                       "• Вы также можете использовать офлайн-сканер с камеры (ML Kit на устройстве) или внести долги вручную без передачи в сеть.",
+                                                text = "• Первые до 10 страниц PDF передаются по HTTPS/TLS в облачный API Google Gemini (Google LLC, США — трансграничная передача данных) как изображения без графического замазывания ПДн.\n" +
+                                                       "• Приложение не хранит файл на собственном сервере; политика хранения на стороне Google зависит от тарифа вашего API-ключа Gemini.\n" +
+                                                       "• Для полной приватности внесите долги вручную в Реестре (встроенный ML Kit с камеры распознаёт только цифры и латиницу).",
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )

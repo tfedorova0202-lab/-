@@ -15,7 +15,7 @@ import kotlinx.coroutines.delay
 
 @Composable
 fun PinScreen(
-    expectedPin: String,
+    verifyPin: (String) -> Boolean,
     onUnlock: () -> Unit
 ) {
     var enteredPin by remember { mutableStateOf("") }
@@ -23,7 +23,7 @@ fun PinScreen(
 
     LaunchedEffect(enteredPin) {
         if (enteredPin.length == 4) {
-            if (enteredPin == expectedPin) {
+            if (verifyPin(enteredPin)) {
                 onUnlock()
             } else {
                 showError = true

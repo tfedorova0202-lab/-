@@ -84,6 +84,7 @@ fun LegalTemplatesDialog(
     }
 
     AlertDialog(
+        properties = SecureUiHelper.dialogProperties(context),
         onDismissRequest = onDismiss,
         title = { Text("Юридические шаблоны") },
         text = {

@@ -54,14 +54,15 @@ class LegalAssistantRepository(
             val req = GenerateContentRequest(
                 contents = listOf(Content(role = "user", parts = listOf(Part(text = "ping"))))
             )
-            val resp = RetrofitClient.service.generateContent("gemini-3.1-flash-lite-preview", key, req)
+            val resp = RetrofitClient.service.generateContent("gemini-2.5-flash", key, req)
             if (resp.candidates?.isNotEmpty() == true) {
                 Result.success("Соединение с сервером ИИ активно (200 OK)")
             } else {
                 Result.failure(Exception("Сервер вернул пустой ответ"))
             }
         } catch (e: Exception) {
-            Result.failure(e)
+            val safeMsg = com.example.utils.PiiRedactor.redact(e.message ?: e.javaClass.simpleName)
+            Result.failure(Exception(safeMsg))
         }
     }
 
@@ -91,21 +92,20 @@ class LegalAssistantRepository(
             SafetySetting(category = "HARM_CATEGORY_DANGEROUS_CONTENT", threshold = "BLOCK_MEDIUM_AND_ABOVE")
         )
 
+        val redactedContents = (if (validContents.isEmpty()) messages else validContents).map { content ->
+            content.copy(
+                parts = content.parts.map { part ->
+                    part.copy(text = part.text?.let { com.example.utils.PiiRedactor.redact(it) })
+                }
+            )
+        }
+
         val request = GenerateContentRequest(
             safetySettings = safetySettings,
-            contents = if (validContents.isEmpty()) messages else validContents,
+            contents = redactedContents,
             systemInstruction = Content(role = "user", parts = listOf(Part(text = systemPrompt + "\n\nCRITICAL POLICY: DO NOT provide instructions on illegal activities. Remind the user to not share PII. All outputs are for informational purposes only.")))
         )
-        return try {
-            executeCall("gemini-3.5-flash", request)
-        } catch (e: Exception) {
-            // Fallback to gemini-2.5-flash if 3.5 is unavailable or throttled
-            try {
-                executeCall("gemini-2.5-flash", request)
-            } catch (fallbackError: Exception) {
-                throw e
-            }
-        }
+        return executeCall("gemini-2.5-flash", request)
     }
 
     // For complex legal analysis (uses gemini-3.1-pro-preview)
@@ -115,8 +115,6 @@ class LegalAssistantRepository(
         mimeType: String,
         systemPrompt: String
     ): String {
-        
-        
         val safetySettings = listOf(
             SafetySetting(category = "HARM_CATEGORY_HARASSMENT", threshold = "BLOCK_MEDIUM_AND_ABOVE"),
             SafetySetting(category = "HARM_CATEGORY_HATE_SPEECH", threshold = "BLOCK_MEDIUM_AND_ABOVE"),
@@ -127,7 +125,7 @@ class LegalAssistantRepository(
         val request = GenerateContentRequest(
             safetySettings = safetySettings,
             contents = listOf(Content(role = "user", parts = listOf(
-                Part(text = text),
+                Part(text = com.example.utils.PiiRedactor.redact(text)),
                 Part(inlineData = InlineData(mimeType = mimeType, data = base64Data))
             ))),
             systemInstruction = Content(role = "user", parts = listOf(Part(text = systemPrompt + "\n\nCRITICAL POLICY: DO NOT provide instructions on illegal activities. Remind the user to not share PII. All outputs are for informational purposes only.")))
@@ -139,8 +137,6 @@ class LegalAssistantRepository(
         text: String,
         systemPrompt: String
     ): String {
-        
-        
         val safetySettings = listOf(
             SafetySetting(category = "HARM_CATEGORY_HARASSMENT", threshold = "BLOCK_MEDIUM_AND_ABOVE"),
             SafetySetting(category = "HARM_CATEGORY_HATE_SPEECH", threshold = "BLOCK_MEDIUM_AND_ABOVE"),
@@ -150,7 +146,7 @@ class LegalAssistantRepository(
 
         val request = GenerateContentRequest(
             safetySettings = safetySettings,
-            contents = listOf(Content(role = "user", parts = listOf(Part(text = text)))),
+            contents = listOf(Content(role = "user", parts = listOf(Part(text = com.example.utils.PiiRedactor.redact(text))))),
             systemInstruction = Content(role = "user", parts = listOf(Part(text = systemPrompt + "\n\nCRITICAL POLICY: DO NOT provide instructions on illegal activities. Remind the user to not share PII. All outputs are for informational purposes only.")))
         )
         return executeCall("gemini-3.1-pro-preview", request)
@@ -160,8 +156,6 @@ class LegalAssistantRepository(
     suspend fun quickCategorize(
         text: String
     ): String {
-         
-        
         val safetySettings = listOf(
             SafetySetting(category = "HARM_CATEGORY_HARASSMENT", threshold = "BLOCK_MEDIUM_AND_ABOVE"),
             SafetySetting(category = "HARM_CATEGORY_HATE_SPEECH", threshold = "BLOCK_MEDIUM_AND_ABOVE"),
@@ -171,7 +165,7 @@ class LegalAssistantRepository(
 
         val request = GenerateContentRequest(
             safetySettings = safetySettings,
-            contents = listOf(Content(role = "user", parts = listOf(Part(text = text))))
+            contents = listOf(Content(role = "user", parts = listOf(Part(text = com.example.utils.PiiRedactor.redact(text)))))
         )
         return executeCall("gemini-3.1-flash-lite-preview", request)
     }
@@ -181,8 +175,13 @@ class LegalAssistantRepository(
         if (key.isBlank()) {
             throw Exception("API-ключ Gemini не настроен. Нажмите на значок ключа вверху экрана или в Профиле, чтобы указать ваш ключ, либо используйте офлайн-консультант.")
         }
-        val response = RetrofitClient.service.generateContent(model, key, request)
-        return response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text 
+        val response = try {
+            RetrofitClient.service.generateContent(model, key, request)
+        } catch (e: Exception) {
+            val safeMsg = com.example.utils.PiiRedactor.redact(e.message ?: "Ошибка сети")
+            throw Exception("Сбой обращения к Gemini API: $safeMsg")
+        }
+        return response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
             ?: throw Exception("Не удалось получить ответ от ИИ (пустой ответ или блокировка фильтром безопасности)")
     }
     

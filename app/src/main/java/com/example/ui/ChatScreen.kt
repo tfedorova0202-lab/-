@@ -148,6 +148,7 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
 
     if (showApiKeyDialog) {
         AlertDialog(
+            properties = SecureUiHelper.dialogProperties(context),
             onDismissRequest = { showApiKeyDialog = false },
             title = { Text("Настройка Gemini API") },
             text = {
@@ -219,6 +220,7 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
 
     if (showDocConsentDialog && pendingDocBase64 != null) {
         AlertDialog(
+            properties = SecureUiHelper.dialogProperties(context),
             onDismissRequest = {
                 showDocConsentDialog = false
                 pendingDocBase64 = null
@@ -233,10 +235,9 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
                         fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
                     )
                     Text(
-                        text = "• Содержимое файла передается по защищенному каналу (TLS 1.3) в API нейросети (Google Gemini) исключительно для оптического распознавания (OCR), поиска кредиторов и сумм долга.\n" +
-                               "• Документ не сохраняется на сервере и не передается третьим лицам.\n" +
-                               "• Пожалуйста, убедитесь, что в файле нет открытых реквизитов банковских карт (CVC/CVV) или полных серий/номеров паспортов.\n" +
-                               "• Вы также можете отказаться и добавить параметры долга вручную в Реестре без передачи документа.",
+                        text = "• Содержимое файла передается целиком (без графического замазывания ПДн) по HTTPS/TLS в облачный API Google Gemini (Google LLC, США — трансграничная передача по ст. 12 ФЗ № 152-ФЗ).\n" +
+                               "• Приложение не хранит файл на собственном сервере; условия обработки на стороне Google зависят от тарифа вашего API-ключа Gemini.\n" +
+                               "• Перед отправкой убедитесь, что в файле скрыты CVV/CVC, номера карт и полные паспортные данные, либо внесите долг вручную без отправки файла.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -273,6 +274,7 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
 
     reportingMessage?.let { reportedMsg ->
         AlertDialog(
+            properties = SecureUiHelper.dialogProperties(context),
             onDismissRequest = { reportingMessage = null },
             icon = { Icon(Icons.Default.Flag, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
             title = { Text("Пожаловаться на ответ ИИ", style = MaterialTheme.typography.titleMedium) },
@@ -318,13 +320,25 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
             confirmButton = {
                 Button(
                     onClick = {
+                        val saved = com.example.utils.AiReportStore.saveReport(
+                            context = context,
+                            reason = reportReason,
+                            comment = reportComment,
+                            messageText = reportedMsg.text
+                        )
+                        val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(android.content.Intent.EXTRA_SUBJECT, "AI Safety Report #${saved.id.take(8)}")
+                            putExtra(android.content.Intent.EXTRA_TEXT, com.example.utils.AiReportStore.buildExportPayload(saved))
+                        }
                         reportingMessage = null
                         reportComment = ""
-                        Toast.makeText(context, "✓ Жалоба зафиксирована. Спасибо за обратную связь!", Toast.LENGTH_LONG).show()
+                        Toast.makeText(context, "✓ Отчет #${saved.id.take(8)} сохранен локально (обезличен)", Toast.LENGTH_SHORT).show()
+                        context.startActivity(android.content.Intent.createChooser(shareIntent, "Отправить отчет разработчику"))
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {
-                    Text("Отправить")
+                    Text("Сохранить и отправить")
                 }
             },
             dismissButton = {

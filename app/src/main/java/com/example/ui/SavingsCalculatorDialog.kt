@@ -22,23 +22,26 @@ fun SavingsCalculatorDialog(
         "28.01.2019 - 30.06.2019 (250%)" to 250f,
         "01.07.2019 - 31.12.2019 (200%)" to 200f,
         "01.01.2020 - 30.06.2023 (150%)" to 150f,
-        "С 01.07.2023 (130%)" to 130f
+        "01.07.2023 - 31.03.2026 (130%)" to 130f,
+        "С 01.04.2026 (100% — ФЗ № 545-ФЗ)" to 100f
     )
-    
+
     var expanded by remember { mutableStateOf(false) }
-    var selectedIndex by remember { mutableStateOf(4) }
+    var selectedIndex by remember { mutableStateOf(5) }
 
     val principal = principalText.toDoubleOrNull() ?: 0.0
     val penalty = penaltyText.toDoubleOrNull() ?: 0.0
-    
+
     val interestRate = periods[selectedIndex].second
 
     // Max legally allowed
     val maxAllowed = principal + (principal * (interestRate / 100.0))
     val currentDemanded = principal + penalty
     val savings = if (currentDemanded > maxAllowed) currentDemanded - maxAllowed else 0.0
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     AlertDialog(
+        properties = SecureUiHelper.dialogProperties(context),
         onDismissRequest = onDismiss,
         title = { Text("Авто-расчет лимитов МФО") },
         text = {

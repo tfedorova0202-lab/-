@@ -38,10 +38,18 @@ class UserPreferencesTest {
     @Test
     fun testPinCodeSaveAndRetrieve() {
         preferences.savePin("1234")
-        assertEquals("1234", preferences.getPin())
+        assertTrue(preferences.hasPin())
+        assertTrue(preferences.verifyPin("1234"))
+        assertFalse(preferences.verifyPin("0000"))
+
+        val rawPrefs = ApplicationProvider.getApplicationContext<Context>()
+            .getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+        assertFalse("Plaintext PIN_CODE must not exist in SharedPreferences", rawPrefs.contains("pin_code"))
+        assertNotEquals("1234", rawPrefs.getString("pin_hash_v2", ""))
 
         preferences.savePin("")
-        assertEquals("", preferences.getPin())
+        assertFalse(preferences.hasPin())
+        assertFalse(preferences.verifyPin("1234"))
     }
 
     @Test

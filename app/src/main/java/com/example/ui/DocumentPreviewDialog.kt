@@ -19,7 +19,9 @@ fun DocumentPreviewDialog(
     onDismiss: () -> Unit,
     onShareClick: (String) -> Unit
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     AlertDialog(
+        properties = SecureUiHelper.dialogProperties(context),
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {

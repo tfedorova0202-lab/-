@@ -28,7 +28,9 @@ fun PayoffCalculatorDialog(
 
     var selectedStrategy by remember { mutableStateOf(Strategy.SNOWBALL) }
 
+    val context = androidx.compose.ui.platform.LocalContext.current
     AlertDialog(
+        properties = SecureUiHelper.dialogProperties(context),
         onDismissRequest = onDismiss,
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {

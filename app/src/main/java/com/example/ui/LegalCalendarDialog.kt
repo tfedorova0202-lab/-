@@ -60,7 +60,7 @@ fun LegalCalendarDialog(
 
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        properties = SecureUiHelper.dialogProperties(context, usePlatformDefaultWidth = false)
     ) {
         Surface(
             modifier = Modifier

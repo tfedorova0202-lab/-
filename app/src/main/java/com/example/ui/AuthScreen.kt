@@ -32,7 +32,7 @@ fun AuthScreen(
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val error by viewModel.error.collectAsStateWithLifecycle()
 
-    var policyAccepted by remember { mutableStateOf(true) }
+    var policyAccepted by remember { mutableStateOf(false) }
 
     LaunchedEffect(currentUser, isGuest) {
         if (currentUser != null || isGuest) {

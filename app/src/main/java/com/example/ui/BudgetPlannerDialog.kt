@@ -24,7 +24,9 @@ fun BudgetPlannerDialog(
     val expensesValue = expenses.toFloatOrNull() ?: 0f
     val disposableIncome = incomeValue - expensesValue
 
+    val context = androidx.compose.ui.platform.LocalContext.current
     AlertDialog(
+        properties = SecureUiHelper.dialogProperties(context),
         onDismissRequest = onDismiss,
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {

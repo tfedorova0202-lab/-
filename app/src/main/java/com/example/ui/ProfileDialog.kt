@@ -51,7 +51,9 @@ fun ProfileDialog(
     var name by remember { mutableStateOf(userPreferences.getName()) }
     var address by remember { mutableStateOf(userPreferences.getAddress()) }
     var phone by remember { mutableStateOf(userPreferences.getPhone()) }
-    var pin by remember { mutableStateOf(userPreferences.getPin()) }
+    var hasExistingPin by remember { mutableStateOf(userPreferences.hasPin()) }
+    var newPin by remember { mutableStateOf("") }
+    var disablePinRequested by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
     val scope = rememberCoroutineScope()
 
@@ -73,6 +75,7 @@ fun ProfileDialog(
     }
 
     AlertDialog(
+        properties = SecureUiHelper.dialogProperties(context),
         onDismissRequest = onDismiss,
         title = { Text("Профиль и Серверы", style = MaterialTheme.typography.titleLarge) },
         text = {
@@ -100,7 +103,7 @@ fun ProfileDialog(
                             Text("Подключение к серверам", style = MaterialTheme.typography.titleSmall)
                         }
                         Text(
-                            text = "• ИИ-сервер Gemini: ${if (repository.isServerConfigured()) "Готов к запросам (HTTPS)" else "Автономная база знаний"}\n• Безопасность: TLS 1.3 / Network Security\n• Облачная БД: Google Firestore Ready",
+                            text = "• ИИ-сервер Gemini: ${if (repository.isServerConfigured()) "Ключ задан (прямой HTTPS-запрос)" else "Ключ не задан (офлайн-база знаний)"}\n• Транспорт: HTTPS/TLS (cleartext отключён)\n• Облачная БД: Firestore (только при входе через Google)",
                             style = MaterialTheme.typography.bodySmall
                         )
                         Row(
@@ -117,7 +120,8 @@ fun ProfileDialog(
                                         serverPingStatus = if (res.isSuccess) {
                                             "✓ " + (res.getOrNull() ?: "Сервер доступен")
                                         } else {
-                                            "⚠ Отклик: режим автономной базы (ошибок нет)"
+                                            val err = res.exceptionOrNull()?.message ?: "нет связи с generativelanguage.googleapis.com"
+                                            "✕ Сервер ИИ недоступен: $err. Работает локальная база знаний."
                                         }
                                         isPinging = false
                                     }
@@ -212,7 +216,7 @@ fun ProfileDialog(
                             Text("Резервная копия реестра (JSON)", style = MaterialTheme.typography.titleSmall)
                         }
                         Text(
-                            text = "Сохраните ваши данные в защищенный JSON-файл или передайте на другое устройство.",
+                            text = "Экспортировать реестр в открытом формате JSON (без шифрования; передавайте только по доверенному каналу).",
                             style = MaterialTheme.typography.bodySmall
                         )
                         Row(
@@ -301,17 +305,37 @@ fun ProfileDialog(
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                 Text(
-                    text = "Приватность (Защита ПИН-кодом)", 
+                    text = "Приватность (Защита ПИН-кодом — хэш PBKDF2)", 
                     style = MaterialTheme.typography.titleSmall
                 )
                 OutlinedTextField(
-                    value = pin,
-                    onValueChange = { if (it.length <= 4 && it.all { char -> char.isDigit() }) pin = it },
-                    label = { Text("4-значный ПИН-код (пусто = выкл)") },
+                    value = newPin,
+                    onValueChange = {
+                        if (it.length <= 4 && it.all { char -> char.isDigit() }) {
+                            newPin = it
+                            disablePinRequested = false
+                        }
+                    },
+                    label = {
+                        Text(
+                            if (hasExistingPin && !disablePinRequested) "Новый 4-значный ПИН (установлен)"
+                            else "4-значный ПИН-код (4 цифры)"
+                        )
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword)
                 )
+                if (hasExistingPin && !disablePinRequested) {
+                    TextButton(
+                        onClick = {
+                            newPin = ""
+                            disablePinRequested = true
+                        }
+                    ) {
+                        Text("Отключить ПИН-код при сохранении", color = MaterialTheme.colorScheme.error)
+                    }
+                }
                 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                 Text(
@@ -361,12 +385,23 @@ fun ProfileDialog(
                             val firestore = FirestoreManager(context)
                             try {
                                 val debts = db.debtDao().getAllDebtsList()
+                                var successCount = 0
+                                var lastError: String? = null
                                 for (debt in debts) {
-                                    firestore.saveDebt(debt)
+                                    val res = firestore.saveDebt(debt)
+                                    if (res.isSuccess) {
+                                        successCount++
+                                    } else {
+                                        lastError = res.exceptionOrNull()?.message
+                                    }
                                 }
-                                syncStatus = "Синхронизировано с облаком Firestore (${debts.size} записей)"
+                                syncStatus = when {
+                                    debts.isEmpty() -> "Реестр пуст — синхронизация не требуется"
+                                    successCount == debts.size -> "✓ Синхронизировано с Firestore: $successCount из ${debts.size}"
+                                    else -> "⚠ Синхронизировано $successCount из ${debts.size}. ${lastError ?: "Войдите через Google и проверьте сеть"}"
+                                }
                             } catch (e: Exception) {
-                                syncStatus = "Офлайн-режим (сохранено на устройстве)"
+                                syncStatus = "⚠ Ошибка синхронизации: ${e.message ?: "нет подключения"}"
                             }
                         }
                     }) {
@@ -461,7 +496,14 @@ fun ProfileDialog(
         confirmButton = {
             Button(onClick = {
                 userPreferences.saveProfile(name, address, phone)
-                userPreferences.savePin(pin)
+                if (disablePinRequested) {
+                    userPreferences.savePin("")
+                    hasExistingPin = false
+                } else if (newPin.length == 4) {
+                    userPreferences.savePin(newPin)
+                    hasExistingPin = true
+                }
+                SecureUiHelper.syncActivitySecureFlag(context)
                 onDismiss()
             }) {
                 Text("Сохранить")
@@ -522,16 +564,16 @@ fun ProfileDialog(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = "1. ХРАНЕНИЕ ДАННЫХ И ПЕСОЧНИЦА ANDROID:\n" +
-                                "Данные реестра долгов по умолчанию хранятся локально во внутреннем защищенном хранилище приложения (изолированная песочница Android Sandbox, доступная только данному приложению). База данных и ключи исключены из автоматического облачного бэкапа Android.\n\n" +
+                        text = "1. ЛОКАЛЬНОЕ ХРАНЕНИЕ И ПЕСОЧНИЦА ANDROID:\n" +
+                                "По умолчанию реестр долгов хранится в локальной базе SQLite/Room (debts_database) внутри изолированной песочницы приложения (App Sandbox; база не использует дополнительное шифрование SQLCipher). PIN-код хранится только в виде солёного хэша PBKDF2-SHA256. Автоматический облачный бэкап Android Auto Backup и перенос D2D отключены.\n\n" +
                                 "2. ОБЛАЧНАЯ СИНХРОНИЗАЦИЯ (ОПЦИОНАЛЬНО):\n" +
-                                "При входе через Google-аккаунт для сохранности данных при смене устройства используется защищенная облачная база Google Cloud / Firebase Firestore с правилами разграничения доступа на уровне пользователя. В режиме «Инкогнито» (гостевой вход) облачная синхронизация отключена.\n\n" +
-                                "3. НЕЙРОСЕТЕВОЙ АНАЛИЗ (GEMINI AI):\n" +
-                                "При использовании функции разбора БКИ и договоров текст документов направляется в API нейросети исключительно в целях классификации и расчета сумм. Прямые паспортные данные отсекаются до отправки. Обработка производится в реальном времени без обучения моделей на личных данных.\n\n" +
-                                "4. НЕПЕРЕДАЧА КОЛЛЕКТОРАМ И БАНКАМ:\n" +
-                                "Сервис не сотрудничает с МФО, банками, коллекторами и третьими лицами, не осуществляет продажу сведений и не встраивает сторонние рекламные трекеры.\n\n" +
-                                "5. ПОЛНОЕ УДАЛЕНИЕ ДАННЫХ (DATA DELETION):\n" +
-                                "В соответствии с требованиями Google Play User Data Policy и 152-ФЗ РФ, пользователь в любой момент вправе в один клик безвозвратно стереть все локальные данные, облачные записи и аккаунт через кнопку «Удалить все персональные данные».",
+                                "При входе через Google-аккаунт записи реестра долгов и базовые метаданные профиля (UID, email, displayName) синхронизируются с Google Cloud Firestore (трансграничная передача данных — требуется оценка по ст. 12 и ч. 5 ст. 18 ФЗ № 152-ФЗ). В гостевом режиме «Инкогнито» облачная синхронизация не выполняется.\n\n" +
+                                "3. НЕЙРОСЕТЕВОЙ АНАЛИЗ (GEMINI API):\n" +
+                                "При отправке текстовых сообщений в ИИ встроенный фильтр PiiRedactor автоматически маскирует номера паспортов, карт, СНИЛС, ИНН, телефоны и email до отправки по HTTPS/TLS. При загрузке PDF/фотографий БКИ и договоров изображения передаются целиком без графического замазывания — перед отправкой запрашивается явное согласие пользователя.\n\n" +
+                                "4. НЕПЕРЕДАЧА КОЛЛЕКТОРАМ И РЕКЛАМНЫМ СЕТЯМ:\n" +
+                                "Приложение не содержит рекламных SDK и трекеров, не продаёт и не передаёт данные кредиторам или коллекторским агентствам.\n\n" +
+                                "5. ПОЛНОЕ УДАЛЕНИЕ ДАННЫХ И АККАУНТА (DATA DELETION):\n" +
+                                "Кнопка «Удалить все персональные данные и реестр» удаляет локальную БД Room, настройки, кэш сгенерированных PDF/CSV, локальные отчёты, а при активной Google-сессии — документы в Firestore и учётную запись Firebase Auth.",
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
@@ -547,12 +589,13 @@ fun ProfileDialog(
     // Диалог: Подтверждение полного удаления всех данных (Google Play Account / Data Deletion)
     if (showDeleteAllDataConfirmDialog) {
         AlertDialog(
+            properties = SecureUiHelper.dialogProperties(context),
             onDismissRequest = { showDeleteAllDataConfirmDialog = false },
             icon = { Icon(Icons.Default.DeleteForever, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
             title = { Text("Удалить все данные?", style = MaterialTheme.typography.titleMedium) },
             text = {
                 Text(
-                    "Вы действительно хотите безвозвратно удалить все данные профиля, реестр долгов, сохраненные документы и очистить историю диалогов?\n\n" +
+                    "Вы действительно хотите безвозвратно удалить профиль, реестр долгов (локально с очисткой SQLite VACUUM и в Firestore), кэш PDF-документов, историю чата и учетную запись?\n\n" +
                     "Это действие необратимо и выполняется в соответствии с Политикой удаления пользовательских данных.",
                     style = MaterialTheme.typography.bodyMedium
                 )
@@ -560,9 +603,10 @@ fun ProfileDialog(
             confirmButton = {
                 Button(
                     onClick = {
-                        userPreferences.clearAllUserData()
-                        authViewModel.signOut()
-                        onFullDataReset()
+                        authViewModel.deleteAccountAndCloudData { resultMessage ->
+                            onFullDataReset()
+                            Toast.makeText(context, resultMessage, Toast.LENGTH_LONG).show()
+                        }
                         showDeleteAllDataConfirmDialog = false
                         onDismiss()
                     },

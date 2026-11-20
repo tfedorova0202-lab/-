@@ -17,40 +17,39 @@ import com.example.BuildConfig
 
 object BkiParser {
     
-    // Convert PDF page to base64 string
+    private const val MAX_RENDER_DIMENSION = 1600
+
+    // Convert PDF page to base64 string with safe FD/PdfRenderer cleanup and OOM cap
     private suspend fun pdfToBase64Images(context: Context, uri: Uri): List<String> = withContext(Dispatchers.IO) {
         val base64Images = mutableListOf<String>()
-        val fileDescriptor: ParcelFileDescriptor? = context.contentResolver.openFileDescriptor(uri, "r")
-        if (fileDescriptor != null) {
-            val pdfRenderer = PdfRenderer(fileDescriptor)
-            val pageCount = pdfRenderer.pageCount
-            
-            // Limit to first 10 pages to avoid payload too large (BKI reports can be long)
-            val limit = minOf(pageCount, 10)
-            
-            for (i in 0 until limit) {
-                val page = pdfRenderer.openPage(i)
-                val bitmap = Bitmap.createBitmap(
-                    page.width * 2, // 2x scale for better text readability
-                    page.height * 2,
-                    Bitmap.Config.ARGB_8888
-                )
-                // Fill white background (PDFs are transparent by default)
-                val canvas = android.graphics.Canvas(bitmap)
-                canvas.drawColor(android.graphics.Color.WHITE)
-                
-                page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                
-                val outputStream = ByteArrayOutputStream()
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 70, outputStream)
-                val base64String = Base64.encodeToString(outputStream.toByteArray(), Base64.NO_WRAP)
-                base64Images.add(base64String)
-                
-                page.close()
-                bitmap.recycle()
+        context.contentResolver.openFileDescriptor(uri, "r")?.use { fileDescriptor ->
+            PdfRenderer(fileDescriptor).use { pdfRenderer ->
+                val limit = minOf(pdfRenderer.pageCount, 10)
+                for (i in 0 until limit) {
+                    pdfRenderer.openPage(i).use { page ->
+                        val rawW = (page.width * 2).coerceAtLeast(1)
+                        val rawH = (page.height * 2).coerceAtLeast(1)
+                        val scale = minOf(
+                            1f,
+                            MAX_RENDER_DIMENSION.toFloat() / maxOf(rawW, rawH).toFloat()
+                        )
+                        val targetW = (rawW * scale).toInt().coerceAtLeast(1)
+                        val targetH = (rawH * scale).toInt().coerceAtLeast(1)
+                        val bitmap = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
+                        try {
+                            val canvas = android.graphics.Canvas(bitmap)
+                            canvas.drawColor(android.graphics.Color.WHITE)
+                            page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+
+                            val outputStream = ByteArrayOutputStream()
+                            bitmap.compress(Bitmap.CompressFormat.JPEG, 70, outputStream)
+                            base64Images.add(Base64.encodeToString(outputStream.toByteArray(), Base64.NO_WRAP))
+                        } finally {
+                            bitmap.recycle()
+                        }
+                    }
+                }
             }
-            pdfRenderer.close()
-            fileDescriptor.close()
         }
         return@withContext base64Images
     }
@@ -61,7 +60,7 @@ object BkiParser {
 
         val parts = mutableListOf<Part>()
         parts.add(Part(text = "Ты — опытный юрист и финансовый аналитик. Проанализируй эти страницы кредитного отчета из БКИ (Бюро Кредитных Историй). Найди все активные кредиты, займы (МФО) и долги. Для каждого долга извлеки: Название кредитора (creditorName), дату договора (contractDate, если нет - пиши 'б/н от [дата]'), текущую сумму задолженности или остаток долга в рублях (factAmount, числом). Если это ипотека - поставь isMortgage=true. Верни результат строго в формате JSON, соответствующем предоставленной схеме."))
-        
+
         for (img in images) {
             parts.add(Part(inlineData = InlineData(mimeType = "image/jpeg", data = img)))
         }
@@ -99,19 +98,19 @@ object BkiParser {
             val userPrefs = UserPreferences(context)
             val customKey = userPrefs.getCustomGeminiApiKey().trim()
             val apiKey = if (customKey.isNotBlank()) customKey else BuildConfig.GEMINI_API_KEY
-            if (apiKey.isBlank() || apiKey == "MY_GEMINI_API_KEY") {
+            if (apiKey.isBlank() || apiKey == "MY_GEMINI_API_KEY" || apiKey == "dummy_key") {
                 throw Exception("Для распознавания отчета БКИ через нейросеть укажите Gemini API ключ (в чате иконка ключа) или внесите данные вручную в Реестре.")
             }
             val response = RetrofitClient.service.generateContent("gemini-2.5-flash", apiKey, request)
             val jsonText = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text ?: "[]"
-            
+
             // Clean possible markdown code fences
             val cleanJson = jsonText.trim()
                 .removePrefix("```json")
                 .removePrefix("```")
                 .removeSuffix("```")
                 .trim()
-            
+
             val jsonArray = Json.parseToJsonElement(cleanJson).jsonArray
             val results = mutableListOf<ParsedDebt>()
             for (element in jsonArray) {
@@ -120,14 +119,13 @@ object BkiParser {
                 val contractDate = obj["contractDate"]?.jsonPrimitive?.content ?: "б/н"
                 val factAmount = obj["factAmount"]?.jsonPrimitive?.doubleOrNull ?: 0.0
                 val isMortgage = obj["isMortgage"]?.jsonPrimitive?.booleanOrNull ?: false
-                
+
                 results.add(ParsedDebt(creditorName, contractDate, factAmount, isMortgage))
             }
             return@withContext results
-            
         } catch (e: Exception) {
-            e.printStackTrace()
-            throw e
+            val safeMsg = PiiRedactor.redact(e.message ?: "Ошибка сети или разбора PDF")
+            throw Exception(safeMsg)
         }
     }
 }

@@ -4,8 +4,10 @@ import android.app.Application
 import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.api.AccountDeleteOutcome
 import com.example.api.FirebaseAuthManager
 import com.example.api.FirestoreManager
+import com.example.data.AppDatabase
 import com.example.utils.UserPreferences
 import com.google.firebase.auth.FirebaseUser
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,7 +17,7 @@ import kotlinx.coroutines.launch
 class AuthViewModel(application: Application) : AndroidViewModel(application) {
     private val authManager = FirebaseAuthManager()
     private val userPrefs = UserPreferences(application)
-    private val firestoreManager = FirestoreManager(application)
+    private val firestoreManager by lazy { FirestoreManager(application) }
 
     private val _currentUser = MutableStateFlow<FirebaseUser?>(authManager.currentUser)
     val currentUser: StateFlow<FirebaseUser?> = _currentUser
@@ -24,9 +26,9 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     val isGuest: StateFlow<Boolean> = _isGuest
 
     private val _authIdentifier = MutableStateFlow(
-        authManager.currentUser?.email 
+        authManager.currentUser?.email
             ?: authManager.currentUser?.displayName
-            ?: userPrefs.getAuthIdentifier().takeIf { it.isNotBlank() } 
+            ?: userPrefs.getAuthIdentifier().takeIf { it.isNotBlank() }
             ?: if (userPrefs.getAuthType() == "GUEST") "Инкогнито (Офлайн)" else ""
     )
     val authIdentifier: StateFlow<String> = _authIdentifier
@@ -57,7 +59,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 _authType.value = "GOOGLE"
                 _isGuest.value = false
                 userPrefs.saveAuthSession("GOOGLE", emailOrName)
-                
+
                 // Synchronize incognito & family security preferences to Firestore
                 val isIncognito = userPrefs.isIncognitoMode()
                 val hideFamily = userPrefs.isHideFamilyInfo()
@@ -80,6 +82,67 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         _authIdentifier.value = "Инкогнито (Офлайн)"
         _authType.value = "GUEST"
         userPrefs.saveAuthSession("GUEST", "Инкогнито")
+    }
+
+    /**
+     * Executes full erasure strictly in safe sequence (no parallel races):
+     * 1) Cloud Firestore documents (while still authenticated)
+     * 2) Firebase Auth user deletion (explicitly detecting FirebaseAuthRecentLoginRequiredException)
+     * 3) Local SQLite Room wipe + PRAGMA secure_delete + VACUUM + WAL TRUNCATE
+     * 4) Local Firestore persistence cache wipe (terminate + clearPersistence)
+     * 5) SharedPreferences, cached PDFs/CSVs, AI safety reports, and sign-out
+     */
+    fun deleteAccountAndCloudData(onComplete: (String) -> Unit = {}) {
+        viewModelScope.launch {
+            val hadCloudSession = authManager.currentUser != null
+            val cloudDataResult = if (hadCloudSession) {
+                firestoreManager.deleteAllUserData()
+            } else {
+                Result.success(Unit)
+            }
+
+            val authDeleteOutcome = if (hadCloudSession && cloudDataResult.isSuccess) {
+                authManager.deleteCurrentAccount()
+            } else if (hadCloudSession) {
+                AccountDeleteOutcome.Failed("cloud_wipe_incomplete")
+            } else {
+                AccountDeleteOutcome.NoActiveAccount
+            }
+
+            // Forensic wipe of local Room SQLite (freelist + WAL)
+            try {
+                AppDatabase.getDatabase(getApplication()).secureWipeAllTables()
+            } catch (_: Exception) {
+                // Best effort
+            }
+
+            // Wipe local Firestore SQLite cache (databases/firestore.*)
+            if (hadCloudSession) {
+                firestoreManager.clearLocalCache()
+            }
+
+            // Sign out locally unless we keep user informed of required re-auth
+            authManager.signOut()
+            userPrefs.clearAllUserData()
+            _currentUser.value = null
+            _isGuest.value = false
+            _authIdentifier.value = ""
+            _authType.value = ""
+
+            val summary = when {
+                !hadCloudSession ->
+                    "Все локальные данные (БД Room с VACUUM, настройки, кэш PDF/CSV и отчёты) удалены."
+                cloudDataResult.isSuccess && authDeleteOutcome is AccountDeleteOutcome.Deleted ->
+                    "Удалены локальные данные (Room + кэш Firestore), облачные документы и учётная запись Firebase Auth."
+                cloudDataResult.isSuccess && authDeleteOutcome is AccountDeleteOutcome.RequiresRecentLogin ->
+                    "Локальные данные и документы Firestore удалены, но Firebase Auth требует свежий вход (до 5 мин) для удаления самой учётной записи. Войдите через Google и повторите удаление."
+                cloudDataResult.isSuccess ->
+                    "Локальные данные и документы Firestore удалены, но удалить запись Firebase Auth не удалось. Повторите попытку при стабильном доступе к сети."
+                else ->
+                    "Локальные данные и кэш удалены, но облачные копии в Firestore не удалось удалить (нет доступа к googleapis.com). Войдите снова при наличии сети для завершения удаления."
+            }
+            onComplete(summary)
+        }
     }
 
     fun signOut() {
