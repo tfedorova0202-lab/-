@@ -29,7 +29,7 @@ jobs:
       # Удален проблемный шаг Set up Android SDK
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Prepare environment configuration
         run: |
