@@ -1,0 +1,101 @@
+name: Android Release Security & Compliance Gate
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-and-gate:
+    name: Unit Tests, Firestore Rules & Release Artifact Gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'gradle'
+
+      - name: Set up Node.js 20 (for Firestore Rules Emulator tests)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Prepare non-production CI environment files
+        run: |
+          echo "GEMINI_API_KEY=dummy_key" > .env
+          if [ -f debug.keystore.base64 ]; then
+            base64 -d debug.keystore.base64 > debug.keystore
+          elif [ ! -f debug.keystore ]; then
+            keytool -genkey -v -keystore debug.keystore \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -alias androiddebugkey \
+              -storepass android -keypass android \
+              -dname "CN=Debug, O=Android, C=US"
+          fi
+          chmod +x gradlew
+
+      - name: Run Unit & Forensic Compliance Tests
+        run: ./gradlew :app:testDebugUnitTest --console=plain
+
+      - name: Run Firestore Security Rules Tests (Firebase Emulator)
+        run: |
+          npm install --no-save firebase-tools @firebase/rules-unit-testing
+          npx firebase emulators:exec --only firestore --project demo-no-project \
+            "FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 node --test firestore.test.js"
+
+      - name: Run Release Verifier Mutation Tests (buildSrc)
+        run: ./gradlew -p buildSrc test --console=plain
+
+      - name: Run Release Artifact Audit (Binary Manifest + DEX + Resources + R8 + ELF 16KB)
+        run: ./gradlew :app:analyzeReleaseArtifact --console=plain
+
+      - name: Upload Release Artifact Audit Reports (JSON + Text)
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifact-audit-reports
+          path: |
+            app/build/reports/release-artifact-audit.json
+            app/build/reports/release-artifact-audit.txt
+          retention-days: 14
+
+      - name: Source Hygiene Gate
+        run: |
+          set -euo pipefail
+          ! grep -rn 'printStackTrace(' app/src/main/java/ || { echo "FAIL: printStackTrace in main sources"; exit 1; }
+          ! grep -rnE 'signInAnonymously|signInWithEmailAndPassword|\.apps\.googleusercontent\.com' app/src/main/ || { echo "FAIL: forbidden auth pattern or hardcoded OAuth client ID"; exit 1; }
+          echo "ALL RELEASE ARTIFACT & SOURCE GATES PASSED."
+
+      - name: Build Signed Release AAB (only when release keystore secrets are configured)
+        if: ${{ secrets.RELEASE_KEYSTORE_BASE64 != '' && secrets.STORE_PASSWORD != '' && secrets.KEY_PASSWORD != '' }}
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/my-upload-key.jks
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > "$KEYSTORE_PATH"
+          trap 'rm -f "$KEYSTORE_PATH"' EXIT
+          ./gradlew :app:bundleRelease --console=plain
+
+      - name: Upload Signed Release AAB & R8 Mapping
+        if: ${{ secrets.RELEASE_KEYSTORE_BASE64 != '' && secrets.STORE_PASSWORD != '' && secrets.KEY_PASSWORD != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-bundle-and-mapping
+          path: |
+            app/build/outputs/bundle/release/*.aab
+            app/build/outputs/mapping/release/mapping.txt
+          retention-days: 14

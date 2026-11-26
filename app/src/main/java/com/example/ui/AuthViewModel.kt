@@ -19,6 +19,13 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     private val userPrefs = UserPreferences(application)
     private val firestoreManager by lazy { FirestoreManager(application) }
 
+    init {
+        // Initialize Firebase only if the user previously opted into Google Sign-In
+        if (userPrefs.getAuthType() == "GOOGLE") {
+            FirebaseAuthManager.ensureInitialized(application)
+        }
+    }
+
     private val _currentUser = MutableStateFlow<FirebaseUser?>(authManager.currentUser)
     val currentUser: StateFlow<FirebaseUser?> = _currentUser
 

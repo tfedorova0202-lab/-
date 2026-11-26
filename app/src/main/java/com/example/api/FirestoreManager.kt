@@ -31,15 +31,28 @@ class FirestoreManager(
     // Convenience constructor: resolves the named database ID lazily on first cloud access
     constructor(context: Context) : this(
         dbProvider = {
+            FirebaseAuthManager.ensureInitialized(context)
             FirebaseFirestore.getInstance(
                 context.applicationContext.getString(R.string.firestore_database_id)
             )
         },
-        authProvider = { Firebase.auth }
+        authProvider = {
+            FirebaseAuthManager.ensureInitialized(context)
+            Firebase.auth
+        }
     )
 
+    private fun currentUidOrNull(): String? {
+        return try {
+            if (!FirebaseAuthManager.isInitialized()) return null
+            auth.currentUser?.uid
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
     fun requireUserId(): String {
-        return auth.currentUser?.uid ?: error("User must be authenticated for this operation")
+        return currentUidOrNull() ?: error("User must be authenticated for this operation")
     }
 
     fun observeDebts(userId: String): Flow<List<Debt>> {
@@ -55,7 +68,7 @@ class FirestoreManager(
     }
 
     suspend fun saveDebt(debt: Debt): Result<Unit> {
-        val uid = auth.currentUser?.uid ?: return Result.failure(Exception("Пользователь не авторизован"))
+        val uid = currentUidOrNull() ?: return Result.failure(Exception("Пользователь не авторизован"))
         val safeId = sanitizeFirestoreId(debt.id)
         if (safeId.isBlank()) {
             return Result.failure(IllegalArgumentException("Некорректный идентификатор записи"))
@@ -88,7 +101,7 @@ class FirestoreManager(
     }
 
     suspend fun getDebts(): Result<List<Debt>> {
-        val uid = auth.currentUser?.uid ?: return Result.failure(Exception("Пользователь не авторизован"))
+        val uid = currentUidOrNull() ?: return Result.failure(Exception("Пользователь не авторизован"))
         return try {
             val snapshot = db.collection("users").document(uid)
                 .collection("debts").get().await()
@@ -105,7 +118,7 @@ class FirestoreManager(
     }
 
     suspend fun deleteDebt(debtId: String): Result<Unit> {
-        val uid = auth.currentUser?.uid ?: return Result.failure(Exception("Пользователь не авторизован"))
+        val uid = currentUidOrNull() ?: return Result.failure(Exception("Пользователь не авторизован"))
         val safeId = sanitizeFirestoreId(debtId)
         if (safeId.isBlank()) return Result.failure(IllegalArgumentException("Debt ID must not be blank"))
         return try {
@@ -124,7 +137,7 @@ class FirestoreManager(
      * Must be invoked while the user is still authenticated before calling FirebaseUser.delete() or signOut().
      */
     suspend fun deleteAllUserData(): Result<Unit> {
-        val uid = auth.currentUser?.uid ?: return Result.success(Unit)
+        val uid = currentUidOrNull() ?: return Result.success(Unit)
         return try {
             val userDoc = db.collection("users").document(uid)
             val debtsSnapshot = userDoc.collection("debts").get().await()
@@ -148,6 +161,7 @@ class FirestoreManager(
      * Best-effort cleanup invoked during full user data erasure.
      */
     suspend fun clearLocalCache(): Result<Unit> {
+        if (!FirebaseAuthManager.isInitialized()) return Result.success(Unit)
         return try {
             val instance = db
             instance.terminate().await()
@@ -160,6 +174,7 @@ class FirestoreManager(
     }
 
     suspend fun saveUserProfile(isIncognito: Boolean, hideFamilyInfo: Boolean): Result<Unit> {
+        if (!FirebaseAuthManager.isInitialized()) return Result.failure(Exception("Пользователь не авторизован"))
         val user = auth.currentUser ?: return Result.failure(Exception("Пользователь не авторизован"))
         return try {
             val docRef = db.collection("users").document(user.uid)

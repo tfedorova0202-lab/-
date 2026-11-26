@@ -82,7 +82,7 @@ class DebtCalculatorViewModel(
                 try {
                     fs.saveDebt(debt) // Синхронизируем в облако Firestore, если авторизован
                 } catch (e: Exception) {
-                    Log.w(TAG, "Cloud sync skipped: ${e.message}")
+                    if (BuildConfig.DEBUG) Log.w(TAG, "Cloud sync skipped: ${e.javaClass.simpleName}")
                 }
             }
         }
@@ -96,7 +96,7 @@ class DebtCalculatorViewModel(
                 try {
                     fs.deleteDebt(debt.id)
                 } catch (e: Exception) {
-                    Log.w(TAG, "Cloud delete skipped: ${e.message}")
+                    if (BuildConfig.DEBUG) Log.w(TAG, "Cloud delete skipped: ${e.javaClass.simpleName}")
                 }
             }
         }

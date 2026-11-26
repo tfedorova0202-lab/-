@@ -161,6 +161,11 @@ class ForensicComplianceTest {
     @Test
     fun testAllPdfTemplates_generateValidFilesStrictlyInDocsCacheAndWrapLongCyrillic() {
         ForensicShadowPdfDocument.reset()
+        // Robolectric assigns a fresh temp cacheDir per test; clear FileProvider's static PathStrategy cache
+        ReflectionHelpers.getStaticField<MutableMap<*, *>>(
+            androidx.core.content.FileProvider::class.java,
+            "sCache"
+        ).clear()
         val context = ApplicationProvider.getApplicationContext<Context>()
         val prefs = UserPreferences(context)
         prefs.clearAllUserData()

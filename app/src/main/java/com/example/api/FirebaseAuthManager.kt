@@ -8,9 +8,11 @@ import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.GetCredentialProviderConfigurationException
 import androidx.credentials.exceptions.NoCredentialException
 import com.example.BuildConfig
+import com.example.R
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.firebase.Firebase
+import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.AuthResult
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthRecentLoginRequiredException
@@ -28,36 +30,35 @@ sealed class AccountDeleteOutcome {
 class FirebaseAuthManager {
     val auth: FirebaseAuth get() = Firebase.auth
     val currentUser get() = try {
-        auth.currentUser
+        if (isInitialized()) auth.currentUser else null
     } catch (_: Throwable) {
         null
     }
 
     /**
      * Interactive Google Sign-In via Jetpack CredentialManager using GetSignInWithGoogleOption.
+     * Lazily initializes FirebaseApp only after explicit user consent/action (FirebaseInitProvider removed).
      * Degrades cleanly on non-GMS devices (RuStore/Huawei) and handles cancellations gracefully.
      */
     suspend fun signInWithGoogle(context: Context): Result<AuthResult> {
+        if (!ensureInitialized(context)) {
+            return Result.failure(
+                IllegalStateException("Облачная авторизация недоступна в текущей конфигурации. Используйте режим «Инкогнито» (офлайн).")
+            )
+        }
+
         val credentialManager = try {
             CredentialManager.create(context)
-        } catch (e: Throwable) {
+        } catch (_: Throwable) {
             return Result.failure(
                 IllegalStateException("Сервисы Google Play (GMS) недоступны на устройстве. Используйте режим «Инкогнито» (офлайн).")
             )
         }
 
-        // Resolve Web Client ID from generated resources or BuildConfig
         val webClientId = try {
-            val resId = context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
-            if (resId != 0) {
-                context.getString(resId)
-            } else {
-                BuildConfig.GOOGLE_WEB_CLIENT_ID
-            }
+            context.getString(R.string.default_web_client_id)
         } catch (_: Exception) {
-            BuildConfig.GOOGLE_WEB_CLIENT_ID
-        }.ifBlank {
-            BuildConfig.GOOGLE_WEB_CLIENT_ID
+            ""
         }
 
         if (webClientId.isBlank()) {
@@ -86,12 +87,12 @@ class FirebaseAuthManager {
             }
         } catch (e: GetCredentialCancellationException) {
             Result.failure(e)
-        } catch (e: GetCredentialProviderConfigurationException) {
+        } catch (_: GetCredentialProviderConfigurationException) {
             if (BuildConfig.DEBUG) Log.w(TAG, "Credential provider unavailable (non-GMS device)")
             Result.failure(
                 IllegalStateException("Вход через Google недоступен без Google Play Services (GMS). Продолжите в режиме «Инкогнито» (офлайн).")
             )
-        } catch (e: NoCredentialException) {
+        } catch (_: NoCredentialException) {
             Result.failure(
                 IllegalStateException("На устройстве не найден активный Google-аккаунт. Вы можете продолжить в режиме «Инкогнито».")
             )
@@ -118,6 +119,7 @@ class FirebaseAuthManager {
     }
 
     fun signOut() {
+        if (!isInitialized()) return
         try {
             auth.signOut()
         } catch (e: Throwable) {
@@ -127,5 +129,25 @@ class FirebaseAuthManager {
 
     companion object {
         private const val TAG = "FirebaseAuthManager"
+
+        fun isInitialized(): Boolean {
+            return try {
+                FirebaseApp.getInstance() != null
+            } catch (_: Throwable) {
+                false
+            }
+        }
+
+        fun ensureInitialized(context: Context): Boolean {
+            return try {
+                val appContext = context.applicationContext
+                val app = FirebaseApp.getApps(appContext).firstOrNull()
+                    ?: FirebaseApp.initializeApp(appContext)
+                app?.setDataCollectionDefaultEnabled(false)
+                app != null
+            } catch (_: Throwable) {
+                false
+            }
+        }
     }
 }

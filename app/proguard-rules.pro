@@ -4,7 +4,7 @@
 -keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod,RuntimeVisibleAnnotations,RuntimeVisibleParameterAnnotations
 -keep class kotlin.Metadata { *; }
 
-# Keep Kotlinx Serialization generated serializers & companion objects
+# Keep Kotlinx Serialization generated serializers & annotated DTOs
 -dontnote kotlinx.serialization.SerializationKt
 -keepclassmembers class kotlinx.serialization.json.** {
     *** Companion;
@@ -13,22 +13,23 @@
     public static *** serializer(...);
 }
 -keep,includedescriptorclasses class com.example.api.**$$serializer { *; }
--keepclassmembers class com.example.api.** {
+-keep @kotlinx.serialization.Serializable class com.example.api.** { *; }
+-keepclassmembers @kotlinx.serialization.Serializable class com.example.api.** {
     *** Companion;
-}
--keepclasseswithmembers class com.example.api.** {
     kotlinx.serialization.KSerializer serializer(...);
 }
 
-# Keep API DTOs, Retrofit interfaces, and Firestore/Room entity models (incl. getters/setters/no-arg ctors)
--keep class com.example.api.** { *; }
--keep interface com.example.api.** { *; }
--keep class com.example.data.** { *; }
+# Keep Retrofit service interfaces (endpoints only, allowing internal managers to obfuscate)
+-keep interface com.example.api.GeminiApiService { *; }
+-keep interface com.example.api.ExternalLegalApiService { *; }
+
+# Keep Firestore models (@Keep / @IgnoreExtraProperties / @PropertyName) and Room entities/DAOs
 -keepclassmembers class * {
     @com.google.firebase.firestore.PropertyName <fields>;
     @com.google.firebase.firestore.PropertyName <methods>;
 }
 -keep @com.google.firebase.firestore.IgnoreExtraProperties class * { *; }
+-keep @androidx.room.Entity class * { *; }
 
 # Retrofit & OkHttp
 -keepclassmembers,allowobfuscation interface * {
@@ -55,11 +56,17 @@
     <init>(...);
 }
 
-# Strip verbose/debug/info logs in release builds to prevent runtime PII leakage via Logcat
+# Note: AGP automatically configures -printseeds, -printusage, -printmapping, and
+# -printconfiguration into outputs/mapping/release/ when isMinifyEnabled = true.
+
+# Strip verbose/debug/info logs and zero-arg printStackTrace() in release builds
 -assumenosideeffects class android.util.Log {
     public static int v(...);
     public static int d(...);
     public static int i(...);
+}
+-assumenosideeffects class java.lang.Throwable {
+    public void printStackTrace();
 }
 
 

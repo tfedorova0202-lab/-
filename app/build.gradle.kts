@@ -1,5 +1,6 @@
 import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
 import java.time.Duration
+import java.util.Locale
 
 plugins {
   alias(libs.plugins.android.application)
@@ -23,7 +24,6 @@ android {
     versionName = "1.0.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-    buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"321866087498-2ep2f75056ttc1lc33aede3mq2haf3vt.apps.googleusercontent.com\"")
   }
 
   signingConfigs {
@@ -154,3 +154,45 @@ tasks.withType<Test> {
     events("passed", "failed", "skipped")
   }
 }
+
+// Wire deterministic binary release verifier via AGP Variant Artifacts API
+// (zero hardcoded build/intermediates/... or build/outputs/... paths).
+androidComponents {
+  onVariants(selector().withBuildType("release")) { variant ->
+    val mappingArtifact = variant.artifacts.get(com.android.build.api.artifact.SingleArtifact.OBFUSCATION_MAPPING_FILE)
+    val signedBundleArtifact = variant.artifacts.get(com.android.build.api.artifact.SingleArtifact.BUNDLE)
+    val releaseKeystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
+    val hasReleaseKeystore = file(releaseKeystorePath).exists()
+
+    tasks.register<com.aistudio.audit.AnalyzeReleaseArtifactTask>("analyzeReleaseArtifact") {
+      group = "verification"
+      description = "Deterministically verifies the packaged release AAB (binary manifest, DEX bytecode, resources.pb, ELF 16KB alignment) and all 4 R8 outputs against release-artifact-baseline.json."
+
+      val bundleArtifact = if (hasReleaseKeystore) {
+        signedBundleArtifact
+      } else {
+        project.tasks.named(
+          "packageReleaseBundle",
+          com.android.build.gradle.internal.tasks.PackageBundleTask::class.java
+        ).flatMap { it.bundleFile }
+      }
+
+      archiveFile.set(bundleArtifact)
+      r8MappingFile.set(mappingArtifact)
+      r8ConfigurationFile.set(mappingArtifact.map { mf ->
+        layout.projectDirectory.file(mf.asFile.parentFile.resolve("configuration.txt").absolutePath)
+      })
+      r8SeedsFile.set(mappingArtifact.map { mf ->
+        layout.projectDirectory.file(mf.asFile.parentFile.resolve("seeds.txt").absolutePath)
+      })
+      r8UsageFile.set(mappingArtifact.map { mf ->
+        layout.projectDirectory.file(mf.asFile.parentFile.resolve("usage.txt").absolutePath)
+      })
+      baselineFile.set(layout.projectDirectory.file("release-artifact-baseline.json"))
+      jsonReportFile.set(layout.buildDirectory.file("reports/release-artifact-audit.json"))
+      textReportFile.set(layout.buildDirectory.file("reports/release-artifact-audit.txt"))
+    }
+  }
+}
+
+

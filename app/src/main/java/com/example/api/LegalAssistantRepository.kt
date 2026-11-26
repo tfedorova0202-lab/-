@@ -69,7 +69,7 @@ class LegalAssistantRepository(
     
     val chatHistory: Flow<List<QueryHistory>> = queryHistoryDao.getAllHistory()
     
-    // For general chat and multi-turn (uses gemini-3.5-flash with proper multi-turn turn alternating)
+    // For general chat and multi-turn (uses stable gemini-2.5-flash with proper multi-turn alternating)
     suspend fun sendGeneralChatMessage(
         messages: List<Content>,
         systemPrompt: String
@@ -108,7 +108,7 @@ class LegalAssistantRepository(
         return executeCall("gemini-2.5-flash", request)
     }
 
-    // For complex legal analysis (uses gemini-3.1-pro-preview)
+    // For complex legal analysis (uses stable multimodal gemini-2.5-flash)
     suspend fun analyzeDocumentWithFile(
         text: String,
         base64Data: String,
@@ -130,7 +130,7 @@ class LegalAssistantRepository(
             ))),
             systemInstruction = Content(role = "user", parts = listOf(Part(text = systemPrompt + "\n\nCRITICAL POLICY: DO NOT provide instructions on illegal activities. Remind the user to not share PII. All outputs are for informational purposes only.")))
         )
-        return executeCall("gemini-3.1-pro-preview", request)
+        return executeCall("gemini-2.5-flash", request)
     }
 
     suspend fun analyzeComplexDocument(
@@ -149,10 +149,10 @@ class LegalAssistantRepository(
             contents = listOf(Content(role = "user", parts = listOf(Part(text = com.example.utils.PiiRedactor.redact(text))))),
             systemInstruction = Content(role = "user", parts = listOf(Part(text = systemPrompt + "\n\nCRITICAL POLICY: DO NOT provide instructions on illegal activities. Remind the user to not share PII. All outputs are for informational purposes only.")))
         )
-        return executeCall("gemini-3.1-pro-preview", request)
+        return executeCall("gemini-2.5-flash", request)
     }
     
-    // For fast categorization or simple tasks (uses gemini-3.1-flash-lite-preview)
+    // For fast categorization or simple tasks (uses stable gemini-2.5-flash)
     suspend fun quickCategorize(
         text: String
     ): String {
@@ -167,7 +167,7 @@ class LegalAssistantRepository(
             safetySettings = safetySettings,
             contents = listOf(Content(role = "user", parts = listOf(Part(text = com.example.utils.PiiRedactor.redact(text)))))
         )
-        return executeCall("gemini-3.1-flash-lite-preview", request)
+        return executeCall("gemini-2.5-flash", request)
     }
 
     private suspend fun executeCall(model: String, request: GenerateContentRequest): String {

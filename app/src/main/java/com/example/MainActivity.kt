@@ -161,7 +161,7 @@ class MainActivity : ComponentActivity() {
                             bkiError = null
                             scope.launch {
                                 try {
-                                    val scannedData = com.example.utils.DocumentScanner.parseDebtFromBitmap(bitmap)
+                                    val scannedData = com.example.utils.DocumentScanner.parseDebtFromBitmap(context, bitmap)
                                     // Открываем диалог добавления долга с предзаполненными данными
                                     editingDebt = Debt(
                                         id = "",

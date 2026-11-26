@@ -1,6 +1,8 @@
 package com.example.utils
 
+import android.content.Context
 import android.graphics.Bitmap
+import com.google.mlkit.common.sdkinternal.MlKitContext
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
@@ -15,8 +17,16 @@ object DocumentScanner {
      * но НЕ поддерживает кириллицу в русских договорах и справках БКИ.
      * Для кириллического текста требуется либо ввод названия кредитора вручную,
      * либо полноценный кириллический OCR (Tesseract/PaddleOCR/серверный OCR).
+     *
+     * MlKitInitProvider и транспорт телеметрии datatransport отключены в AndroidManifest.xml;
+     * инициализация выполняется лениво только при явном сканировании документа.
      */
-    suspend fun parseDebtFromBitmap(bitmap: Bitmap): ScannedDebtResult {
+    suspend fun parseDebtFromBitmap(context: Context, bitmap: Bitmap): ScannedDebtResult {
+        try {
+            MlKitContext.initializeIfNeeded(context.applicationContext)
+        } catch (_: Throwable) {
+            throw Exception("Распознавание с камеры недоступно (требуется GMS/ML Kit). Внесите параметры долга вручную.")
+        }
         val image = InputImage.fromBitmap(bitmap, 0)
         val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
         

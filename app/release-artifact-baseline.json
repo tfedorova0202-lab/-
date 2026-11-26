@@ -1,0 +1,108 @@
+{
+  "schemaVersion": 1,
+  "expectedPackage": "com.aistudio.legaldebthelp.vxbq",
+  "allowedPermissions": [
+    "android.permission.ACCESS_NETWORK_STATE",
+    "android.permission.INTERNET",
+    "android.permission.USE_BIOMETRIC",
+    "android.permission.USE_FINGERPRINT",
+    "com.aistudio.legaldebthelp.vxbq.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
+    "com.google.android.providers.gsf.permission.READ_GSERVICES"
+  ],
+  "allowedActivities": [
+    "androidx.credentials.playservices.HiddenActivity",
+    "androidx.credentials.playservices.IdentityCredentialApiHiddenActivity",
+    "com.example.MainActivity",
+    "com.google.android.gms.auth.api.signin.internal.SignInHubActivity",
+    "com.google.android.gms.common.api.GoogleApiActivity",
+    "com.google.android.play.core.common.PlayCoreDialogWrapperActivity",
+    "com.google.firebase.auth.internal.GenericIdpActivity",
+    "com.google.firebase.auth.internal.RecaptchaActivity"
+  ],
+  "allowedServices": [
+    "androidx.credentials.playservices.CredentialProviderMetadataHolder",
+    "androidx.room.MultiInstanceInvalidationService",
+    "com.google.android.gms.auth.api.signin.RevocationBoundService",
+    "com.google.firebase.components.ComponentDiscoveryService",
+    "com.google.mlkit.common.internal.MlKitComponentDiscoveryService"
+  ],
+  "allowedReceivers": [
+    "androidx.profileinstaller.ProfileInstallReceiver"
+  ],
+  "allowedProviders": [
+    "androidx.core.content.FileProvider",
+    "androidx.startup.InitializationProvider"
+  ],
+  "allowedExportedWithoutPermission": [
+    "com.google.firebase.auth.internal.GenericIdpActivity",
+    "com.google.firebase.auth.internal.RecaptchaActivity"
+  ],
+  "allowedNativeLibsByAbi": {
+    "arm64-v8a": [
+      "libandroidx.graphics.path.so",
+      "libdatastore_shared_counter.so",
+      "libmlkit_google_ocr_pipeline.so"
+    ],
+    "armeabi-v7a": [
+      "libandroidx.graphics.path.so",
+      "libdatastore_shared_counter.so",
+      "libmlkit_google_ocr_pipeline.so"
+    ],
+    "x86": [
+      "libandroidx.graphics.path.so",
+      "libdatastore_shared_counter.so",
+      "libmlkit_google_ocr_pipeline.so"
+    ],
+    "x86_64": [
+      "libandroidx.graphics.path.so",
+      "libdatastore_shared_counter.so",
+      "libmlkit_google_ocr_pipeline.so"
+    ]
+  },
+  "allowedAssetPrefixes": [
+    "base/assets/mlkit-google-ocr-models/"
+  ],
+  "allowedMetaInfServiceCountMax": 16,
+  "forbiddenDexMethodRefs": [
+    "Landroid/util/Log;->v",
+    "Landroid/util/Log;->d",
+    "Landroid/util/Log;->i",
+    "Ljava/lang/Throwable;->printStackTrace()V"
+  ],
+  "forbiddenDexTypeSubstrings": [
+    "DebugAppCheckProviderFactory",
+    "com/google/firebase/appcheck/debug/",
+    "FirebaseInitProvider",
+    "MlKitInitProvider",
+    "TransportBackendDiscovery",
+    "JobInfoSchedulerService",
+    "AlarmManagerSchedulerBroadcastReceiver"
+  ],
+  "forbiddenStringTokens": [
+    "ais-dev-",
+    "DebugAppCheckProviderFactory",
+    "com/google/firebase/appcheck/debug"
+  ],
+  "forbiddenDexOnlyStringTokens": [
+    "321866087498-2ep2f75056ttc1lc33aede3mq2haf3vt.apps.googleusercontent.com"
+  ],
+  "allowedCleartextUrlPrefixes": [
+    "http://schemas.android.com/",
+    "http://www.w3.org/",
+    "http://xml.org/",
+    "http://xmlpull.org/",
+    "http://apache.org/",
+    "http://ns.adobe.com/",
+    "http://ns.google.com/",
+    "http://localhost",
+    "http://127.0.0.1",
+    "http://a.b"
+  ],
+  "forbiddenBroadR8Directives": [
+    "-dontobfuscate",
+    "-dontshrink",
+    "-dontoptimize"
+  ],
+  "maxUnobfuscatedAppClasses": 60,
+  "require16KbElfAlignmentOn64Bit": true
+}
